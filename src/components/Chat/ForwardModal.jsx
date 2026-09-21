@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Cancel01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import { getMyRooms } from '../../api/rooms.api';
@@ -62,8 +64,8 @@ export default function ForwardModal({ isOpen, onClose, messageToForward, onForw
 
         <div className="flex justify-between items-center px-4 py-3.5 border-b border-base-300">
           <h3 className="font-bold text-sm">Chuyển tiếp tin nhắn</h3>
-          <Button onClick={onClose} size="xs" circle>
-            ✕
+          <Button onClick={onClose} size="xs" circle aria-label="Đóng">
+            <HugeiconsIcon icon={Cancel01Icon} size={14} strokeWidth={1.8} />
           </Button>
         </div>
 
@@ -129,7 +131,7 @@ export default function ForwardModal({ isOpen, onClose, messageToForward, onForw
                           : 'btn-primary text-white'
                       }`}
                     >
-                      {hasSent ? '✓ Đã gửi' : 'Gửi'}
+                      {hasSent ? <span className="inline-flex items-center gap-1"><HugeiconsIcon icon={CheckmarkCircle02Icon} size={14} strokeWidth={1.8} />Đã gửi</span> : 'Gửi'}
                     </button>
                   </div>
                 );

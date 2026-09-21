@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { MessageCircle, Users, KeyRound, Settings, LogOut, ShieldAlert, Megaphone } from '../icons';
+import { MessageCircle, Users, Settings, LogOut, ShieldAlert, Megaphone } from '../icons';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../hooks/useSocket';
 import { getNotifications } from '../../api/notifications.api';
@@ -14,7 +14,7 @@ const NavIcon = ({ active, onClick, title, children }) => (
   </Button>
 );
 
-export default function IconRail({ view, onSelectChat, onSelectFriends, onOpenProfile, onOpenKeyBackup }) {
+export default function IconRail({ view, onSelectChat, onSelectFriends, onOpenProfile }) {
   const { user, logout } = useAuth();
   const { on } = useSocket();
   const navigate = useNavigate();
@@ -55,9 +55,6 @@ export default function IconRail({ view, onSelectChat, onSelectFriends, onOpenPr
       </NavIcon>
       <NavIcon active={view === 'friends'} onClick={onSelectFriends} title="Bạn bè">
         <Users className="w-5 h-5" />
-      </NavIcon>
-      <NavIcon onClick={onOpenKeyBackup} title="Sao lưu & Khôi phục Khóa E2EE">
-        <KeyRound className="w-5 h-5" />
       </NavIcon>
       <div className="relative">
         <NavIcon

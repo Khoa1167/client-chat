@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { App as CapacitorApp } from '@capacitor/app';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { CallProvider } from './context/CallContext';
+import { GroupCallProvider } from './context/GroupCallContext';
 import { ThemeProvider } from './context/ThemeContext';
 import Login       from './components/Auth/Login';
 import Register    from './components/Auth/Register';
@@ -13,13 +15,17 @@ import SettingsPage from './pages/SettingsPage';
 import ToastContainer from './components/common/ToastContainer';
 import FullPageLoading from './components/common/FullPageLoading';
 
-const PrivateRoute = ({ children }) => {
+const PrivateRoute = () => {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (loading) return <FullPageLoading />;
   return user ? (
     <SocketProvider>
-      {children}
+      <CallProvider>
+        <GroupCallProvider>
+          <Outlet />
+        </GroupCallProvider>
+      </CallProvider>
     </SocketProvider>
   ) : <Navigate to="/login" state={{ from: location }} replace />;
 };
@@ -71,21 +77,15 @@ export default function App() {
               </PublicOnlyRoute>
             } />
             <Route path="/set-nickname" element={<SetNickname />} />
-            <Route path="/admin" element={
-              <AdminRoute>
-                <AdminPage />
-              </AdminRoute>
-            } />
-            <Route path="/settings" element={
-              <PrivateRoute>
-                <SettingsPage />
-              </PrivateRoute>
-            } />
-            <Route path="/" element={
-              <PrivateRoute>
-                <ChatPage />
-              </PrivateRoute>
-            } />
+            <Route element={<PrivateRoute />}>
+              <Route path="/admin" element={
+                <AdminRoute>
+                  <AdminPage />
+                </AdminRoute>
+              } />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/" element={<ChatPage />} />
+            </Route>
           </Routes>
         </BrowserRouter>
       </AuthProvider>

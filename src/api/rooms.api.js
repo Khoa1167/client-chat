@@ -10,6 +10,9 @@ export const createRoom = (payload) =>
 export const getRoomMessages = (roomId, params) =>
   api.get(`/rooms/${roomId}/messages`, { params }).then(res => res.data);
 
+export const getRoomDevices = (roomId) =>
+  api.get(`/rooms/${roomId}/devices`).then(res => res.data);
+
 export const previewInvite = (inviteCode) =>
   api.get(`/rooms/invite/${inviteCode}`).then(res => res.data);
 
@@ -93,7 +96,22 @@ export const grantPermission = (roomId, userId, permission) =>
 export const revokePermission = (roomId, userId, permission) =>
   api.delete(`/rooms/${roomId}/permissions/${userId}`, { data: { permission } }).then(res => res.data);
 
-// uploadPath: 1 trong FILE_UPLOAD_CONFIG (upload-image/-audio/-file) — path chọn theo loại đính
-// kèm vẫn do caller quyết định (gắn với logic mã hóa từng loại), ở đây chỉ lo phần gọi HTTP.
-export const uploadEncryptedFile = (uploadPath, formData) =>
-  api.post(uploadPath, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(res => res.data);
+export const uploadEncryptedAttachment = async (roomId, type, ciphertext) => {
+  const reservation = await api.post(`/rooms/${roomId}/attachments`, {
+    type,
+    expectedSize: ciphertext.byteLength,
+  }).then(res => res.data);
+
+  const response = await fetch(reservation.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: ciphertext,
+  });
+  if (!response.ok) throw new Error('Không thể upload attachment lên R2');
+
+  await api.post(`/rooms/${roomId}/attachments/${reservation.attachmentId}/complete`);
+  return reservation.attachmentId;
+};
+
+export const getAttachmentDownloadUrl = (roomId, attachmentId) =>
+  api.get(`/rooms/${roomId}/attachments/${attachmentId}/download-url`).then(res => res.data.url);

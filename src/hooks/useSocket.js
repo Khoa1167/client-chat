@@ -3,7 +3,7 @@ import { useSocketContext } from '../context/SocketContext';
 import { debugLog } from '../utils/debugLog';
 
 export const useSocket = () => {
-  const { socket, isConnected, reconnectFailed } = useSocketContext() || {};
+  const { socket, isConnected, reconnectFailed, mailboxEmitter } = useSocketContext() || {};
   const pendingQueue = useRef([]);
 
   useEffect(() => {
@@ -42,13 +42,18 @@ export const useSocket = () => {
     }
   }, [socket]);
 
+  // Lắng nghe cả sự kiện real-time từ socket lẫn sự kiện mailbox catch-up (phát nội bộ, không qua
+  // network) — để các phòng đang mở tự cập nhật khi kéo được tin nhắn nhỡ sau khi mất mạng.
   const on = useCallback((event, handler) => {
     if (!socket) return () => {};
+    const fromMailbox = (e) => handler(e.detail);
     socket.on(event, handler);
+    mailboxEmitter?.addEventListener(event, fromMailbox);
     return () => {
       socket.off(event, handler);
+      mailboxEmitter?.removeEventListener(event, fromMailbox);
     };
-  }, [socket]);
+  }, [socket, mailboxEmitter]);
 
   return { emit, on, isConnected: !!isConnected, reconnectFailed: !!reconnectFailed, socketRef: { current: socket } };
 };

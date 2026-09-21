@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Cancel01Icon } from '@hugeicons/core-free-icons';
 
 // Toast/banner dùng chung, đi kèm useTimedMessage(). variant="banner": khối tĩnh trong layout;
 // items: nhiều thông báo cùng lúc. Class Tailwind phải viết literal (JIT không quét chuỗi ghép động).
@@ -69,7 +71,7 @@ export default function Toast({
                 className={`${meta.close} leading-none shrink-0`}
                 aria-label="Đóng thông báo"
               >
-                ✕
+                <HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={1.8} />
               </button>
             </motion.div>
           );

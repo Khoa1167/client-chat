@@ -52,6 +52,9 @@ export const logout = () =>
 export const getMe = () =>
   api.get('/auth/me').then(res => res.data);
 
+export const getCallIceServers = () =>
+  api.get('/auth/call-ice-servers').then(res => res.data.iceServers);
+
 export const getLoginHistory = () =>
   api.get('/auth/login-history').then(res => res.data);
 
@@ -94,3 +97,20 @@ export const getDevices = () =>
 
 export const revokeDevice = (deviceId, currentPassword) =>
   api.delete(`/auth/devices/${deviceId}`, { data: { currentPassword } }).then(res => res.data);
+
+export const createDeviceLinkTransfer = (publicKey) =>
+  api.post('/auth/device-link', { publicKey }).then(res => res.data);
+export const approveDeviceLinkByCode = (code) =>
+  api.post('/auth/device-link/code', { code }).then(res => res.data);
+export const approveDeviceLinkTransfer = (sessionId) =>
+  api.post(`/auth/device-link/${sessionId}/approve`).then(res => res.data);
+export const reserveDeviceLinkArchive = (sessionId, payload) =>
+  api.post(`/auth/device-link/${sessionId}/archive`, payload).then(res => res.data);
+export const getDeviceLinkArchivePartUploadUrl = (sessionId, partNumber, payload) =>
+  api.post(`/auth/device-link/${sessionId}/archive/parts/${partNumber}`, payload).then(res => res.data);
+export const completeDeviceLinkArchive = (sessionId) =>
+  api.post(`/auth/device-link/${sessionId}/archive/complete`).then(res => res.data);
+export const getDeviceLinkArchive = (sessionId) =>
+  api.get(`/auth/device-link/${sessionId}/archive`).then(res => res.data);
+export const acknowledgeDeviceLinkArchive = (sessionId) =>
+  api.delete(`/auth/device-link/${sessionId}/archive`).then(res => res.data);

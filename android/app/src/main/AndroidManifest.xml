@@ -38,6 +38,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <!-- Ghi âm tin nhắn thoại (useVoiceRecorder.js) + dictation Web Speech API (useDictation.js) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Quét QR mời vào nhóm (QRScannerModal.jsx) -->

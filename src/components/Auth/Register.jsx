@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Loading03Icon } from '@hugeicons/core-free-icons';
 import { Link, useNavigate } from 'react-router-dom';
 import { checkUsername, sendOtp, verifyOtp } from '../../api/auth.api';
 import Turnstile from '../common/Turnstile';
@@ -161,7 +163,7 @@ export default function Register() {
   const getUsernameMsg = () => {
     // Lỗi conflict từ server ưu tiên hiện trước, chỉ mất khi user sửa lại ô này (xem onChange).
     if (fieldErrors.username) return <span className="text-xs text-error flex items-center gap-1 mt-1">{fieldErrors.username}</span>;
-    if (usernameStatus === 'checking') return <span className="text-xs text-info flex items-center gap-1 mt-1">⏳ Đang kiểm tra...</span>;
+    if (usernameStatus === 'checking') return <span className="text-xs text-info flex items-center gap-1 mt-1"><HugeiconsIcon icon={Loading03Icon} size={14} strokeWidth={1.8} className="animate-spin" />Đang kiểm tra...</span>;
     if (usernameStatus === 'available') return <span className="text-xs text-success flex items-center gap-1 mt-1">Tên tài khoản có thể dùng</span>;
     if (usernameStatus === 'taken')    return <span className="text-xs text-error flex items-center gap-1 mt-1">Tên tài khoản đã tồn tại</span>;
     if (usernameStatus === 'invalid')  return <span className="text-xs text-error flex items-center gap-1 mt-1">Tài khoản chỉ được chứa chữ cái và số, không kí tự đặc biệt, độ dài 3-16 kí tự</span>;
@@ -171,7 +173,7 @@ export default function Register() {
   // ── Giao diện bước 1: Form đăng ký ──
   if (step === 1) {
     return (
-      <div data-theme="aurora" className="min-h-screen flex items-center justify-center bg-base-200 px-4 py-8">
+    <div data-theme="aurora" className="min-h-[100dvh] flex items-center justify-center bg-base-200 px-4 py-8">
         <div className="card w-full max-w-lg bg-base-100 shadow-2xl border border-base-300/50">
           <div className="card-body p-8">
             <h1 className="text-3xl font-bold text-center text-primary mb-2">Đăng ký</h1>
@@ -307,7 +309,7 @@ export default function Register() {
 
   // ── Giao diện bước 2: Nhập OTP ──
   return (
-    <div data-theme="aurora" className="min-h-screen flex items-center justify-center bg-base-200 px-4">
+    <div data-theme="aurora" className="min-h-[100dvh] flex items-center justify-center bg-base-200 px-4">
       <div className="card w-full max-w-md bg-base-100 shadow-2xl border border-base-300/50">
         <div className="card-body p-8">
           <h1 className="text-3xl font-bold text-center text-primary mb-2">Đăng ký</h1>

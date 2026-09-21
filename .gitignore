@@ -12,6 +12,19 @@ dist
 dist-ssr
 *.local
 
+# Local configuration and credentials.
+# Keep only sanitized templates such as .env.example in Git.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

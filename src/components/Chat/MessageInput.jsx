@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Paperclip, Mic, Pencil, Send, Trash2, Timer } from '../icons';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Cancel01Icon, File01Icon, ReplyIcon } from '@hugeicons/core-free-icons';
+import { Paperclip, Mic, Pencil, Plus, Send, Trash2, Timer } from '../icons';
 import Button from '../common/Button';
-import FabFlower from '../common/FabFlower';
 import { toast } from '../common/toastStore';
 import { checkLink } from '../../api/security.api';
 import { scanLinksInText } from '../../utils/securityScan';
@@ -67,9 +68,10 @@ export default function MessageInput({ onSend, onTyping, replyTo, onCancelReply,
   useEffect(() => {
     const input = messageInputRef.current;
     if (!input) return;
-    input.style.height = '0px';
-    input.style.height = `${input.scrollHeight}px`;
-    input.style.overflowY = input.scrollHeight > input.clientHeight ? 'auto' : 'hidden';
+    input.style.height = 'auto';
+    const maxHeight = parseFloat(getComputedStyle(input).maxHeight);
+    input.style.height = `${Math.min(input.scrollHeight, maxHeight)}px`;
+    input.style.overflowY = input.scrollHeight > maxHeight ? 'auto' : 'hidden';
   }, [content]);
 
   // Dùng chung cho cả chọn qua input file lẫn kéo-thả — validate size + tạo preview giống hệt nhau
@@ -83,7 +85,7 @@ export default function MessageInput({ onSend, onTyping, replyTo, onCancelReply,
       const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_FILE_SIZE;
 
       if (file.size > maxSize) {
-        toast.error(isImage ? 'Ảnh không được vượt quá 10MB' : 'File không được vượt quá 50MB');
+        toast.error(isImage ? 'Ảnh không được vượt quá 10MB' : 'File không được vượt quá 25MB');
         return;
       }
 
@@ -238,7 +240,7 @@ export default function MessageInput({ onSend, onTyping, replyTo, onCancelReply,
         if (scanResult.hasWarning) {
           const warningMsg = scanResult.warnings.map(w => w.message).join('\n');
           const confirmSend = await confirm(
-            '⚠️ Cảnh báo an toàn liên kết',
+            'Cảnh báo an toàn liên kết',
             `${warningMsg}\n\nBạn có chắc chắn vẫn muốn gửi tin nhắn này không?`,
             { confirmLabel: 'Vẫn gửi', cancelLabel: 'Hủy gửi' }
           );
@@ -248,7 +250,7 @@ export default function MessageInput({ onSend, onTyping, replyTo, onCancelReply,
           }
         }
 
-        onSend(trimmed, replyTo?._id, 'text', null, ttlSeconds);
+        await onSend(trimmed, replyTo?._id, 'text', null, ttlSeconds);
         setContent('');
       }
 
@@ -313,10 +315,11 @@ export default function MessageInput({ onSend, onTyping, replyTo, onCancelReply,
 
       {replyTo && (
         <div className="flex justify-between items-center bg-base-200 border-l-2 border-primary rounded-lg px-3.5 py-1.5 text-xs shadow-xs mb-1">
-          <span>
-            ↩ Đang trả lời <strong className="font-bold text-primary">@{replyTo.sender.nickname || replyTo.sender.username}</strong>
+          <span className="flex items-center gap-1">
+            <HugeiconsIcon icon={ReplyIcon} size={14} strokeWidth={1.8} />
+            Đang trả lời <strong className="font-bold text-primary">@{replyTo.sender.nickname || replyTo.sender.username}</strong>
           </span>
-          <Button onClick={onCancelReply} size="xs" className="bg-base-300">✕ Hủy</Button>
+          <Button onClick={onCancelReply} size="xs" className="bg-base-300 gap-1"><HugeiconsIcon icon={Cancel01Icon} size={13} strokeWidth={1.8} />Hủy</Button>
         </div>
       )}
 
@@ -332,8 +335,8 @@ export default function MessageInput({ onSend, onTyping, replyTo, onCancelReply,
                   className="w-10 h-10 rounded-md object-cover"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-md bg-base-300 flex items-center justify-center text-lg select-none">
-                  📄
+                <div className="w-10 h-10 rounded-md bg-base-300 flex items-center justify-center text-base-content/60">
+                  <HugeiconsIcon icon={File01Icon} size={20} strokeWidth={1.8} />
                 </div>
               )}
               <div className="ml-2 flex-1 min-w-0 pr-4">
@@ -346,7 +349,7 @@ export default function MessageInput({ onSend, onTyping, replyTo, onCancelReply,
                 className="btn btn-circle btn-error text-white absolute -top-1.5 -right-1.5 w-4.5 h-4.5 min-h-0 h-4.5 text-[10px]"
                 title="Xóa"
               >
-                ✕
+                <HugeiconsIcon icon={Cancel01Icon} size={12} strokeWidth={1.8} />
               </button>
             </div>
           ))}
@@ -384,50 +387,41 @@ export default function MessageInput({ onSend, onTyping, replyTo, onCancelReply,
         </div>
       ) : (
         // Giao diện bình thường
-        <form onSubmit={handleSubmit} className="join w-full items-end bg-base-200 rounded-full px-4 py-2">
-          <FabFlower direction="right">
-            <Button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              size="sm" circle className="hover:!text-primary"
-              disabled={isSending}
-              title="Đính kèm ảnh/tệp tin"
-            >
-              <Paperclip className="w-4 h-4" />
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                if (dictation.isListening) dictation.stop();
-                startRecording();
-              }}
-              size="sm" circle className="hover:!text-primary"
-              title="Ghi âm thoại"
-            >
-              <Mic className="w-4 h-4" />
-            </Button>
-            {dictation.isSupported && (
-              <Button
-                type="button"
-                onClick={handleToggleDictation}
-                variant={dictation.isListening ? 'primary' : 'ghost'}
-                size="sm" circle className={dictation.isListening ? 'animate-pulse' : 'hover:!text-primary'}
-                title={dictation.isListening ? 'Đang nghe — bấm để dừng' : 'Đọc thành chữ'}
-              >
-                <Pencil className="w-4 h-4" />
+        <form onSubmit={handleSubmit} className="join relative w-full items-end bg-base-200 rounded-full px-4 py-2">
+          <div className="fab !absolute !bottom-2 !left-4 !right-auto !items-start z-20">
+            <div tabIndex={0} role="button" aria-label="Thêm chức năng" className="btn btn-sm btn-circle btn-primary" title="Thêm chức năng">
+              <Plus className="w-4 h-4" />
+            </div>
+            <div className="fab-close !left-0 !right-auto !flex-row-reverse text-xs font-medium">
+              Đóng <span className="btn btn-sm btn-circle btn-error"><HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={1.8} /></span>
+            </div>
+            <div className="!flex-row-reverse">
+              Đính kèm
+              <Button type="button" onClick={() => fileInputRef.current?.click()} size="sm" circle className="hover:!text-primary" disabled={isSending} title="Đính kèm ảnh/tệp tin">
+                <Paperclip className="w-4 h-4" />
               </Button>
+            </div>
+            <div className="!flex-row-reverse">
+              Ghi âm
+              <Button type="button" onClick={() => { if (dictation.isListening) dictation.stop(); startRecording(); }} size="sm" circle className="hover:!text-primary" title="Ghi âm thoại">
+                <Mic className="w-4 h-4" />
+              </Button>
+            </div>
+            {dictation.isSupported && (
+              <div className="!flex-row-reverse">
+                Đọc thành chữ
+                <Button type="button" onClick={handleToggleDictation} variant={dictation.isListening ? 'primary' : 'ghost'} size="sm" circle className={dictation.isListening ? 'animate-pulse' : 'hover:!text-primary'} title={dictation.isListening ? 'Đang nghe — bấm để dừng' : 'Đọc thành chữ'}>
+                  <Pencil className="w-4 h-4" />
+                </Button>
+              </div>
             )}
-            <div className="relative">
-              <Button
-                type="button"
-                onClick={() => setShowTtlMenu(value => !value)}
-                size="sm" circle className={ttlSeconds ? '!text-primary bg-primary/10' : 'hover:!text-primary'}
-                title={ttlSeconds ? `Tin nhắn tự hủy sau ${TTL_OPTIONS.find(o => o.value === ttlSeconds)?.label}` : 'Tin nhắn tự hủy'}
-              >
+            <div className="relative !flex-row-reverse">
+              Tin nhắn tự hủy
+              <Button type="button" onClick={() => setShowTtlMenu(value => !value)} size="sm" circle className={ttlSeconds ? '!text-primary bg-primary/10' : 'hover:!text-primary'} title={ttlSeconds ? `Tin nhắn tự hủy sau ${TTL_OPTIONS.find(o => o.value === ttlSeconds)?.label}` : 'Tin nhắn tự hủy'}>
                 <Timer className="w-4 h-4" />
               </Button>
               {showTtlMenu && (
-                <ul className="absolute bottom-full mb-2 right-0 menu menu-sm bg-base-100 border border-base-300 rounded-xl shadow-lg w-36 p-1 z-30">
+                <ul className="absolute bottom-full mb-2 left-0 right-auto menu menu-sm bg-base-100 border border-base-300 rounded-xl shadow-lg w-36 p-1 z-30">
                   {TTL_OPTIONS.map(opt => (
                     <li key={opt.label}>
                       <a onClick={() => handlePickTtl(opt.value)} className={ttlSeconds === opt.value ? 'active font-semibold' : ''}>{opt.label}</a>
@@ -436,7 +430,7 @@ export default function MessageInput({ onSend, onTyping, replyTo, onCancelReply,
                 </ul>
               )}
             </div>
-          </FabFlower>
+          </div>
           <input
             type="file"
             ref={fileInputRef}
@@ -448,12 +442,12 @@ export default function MessageInput({ onSend, onTyping, replyTo, onCancelReply,
           <textarea
             ref={messageInputRef}
             rows={1}
-            className="textarea textarea-ghost min-h-0 h-9 max-h-[calc(100cqh/3)] flex-1 w-full resize-none bg-transparent py-2 text-sm leading-5 focus:outline-none"
+            className="textarea textarea-ghost min-h-0 h-9 max-h-[calc(100cqh/3)] flex-1 w-full resize-none bg-transparent py-2 pl-10 text-sm leading-5 focus:outline-none"
             value={content}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             maxLength={MAX_MESSAGE_LENGTH}
-            placeholder="Nhập tin nhắn... (Nhấn Enter để gửi)"
+            placeholder="            Nhập tin nhắn... (Nhấn Enter để gửi)"
             autoFocus
             disabled={isSending}
           />

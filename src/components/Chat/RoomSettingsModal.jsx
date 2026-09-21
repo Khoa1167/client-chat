@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { MessageCircleIcon } from '@hugeicons/core-free-icons';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import { toast } from '../common/toastStore';
@@ -53,7 +55,7 @@ export default function RoomSettingsModal({ room, roomName, roomAvatar, roomIsPr
             {avatarPreview ? (
               <img src={avatarPreview} alt="avatar phòng" />
             ) : (
-              <span className="w-full h-full flex items-center justify-center text-2xl">💬</span>
+              <HugeiconsIcon icon={MessageCircleIcon} size={24} strokeWidth={1.8} />
             )}
           </div>
           <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200">

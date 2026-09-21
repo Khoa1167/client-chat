@@ -23,7 +23,13 @@ export default function useVoiceRecorder({ onSend, replyTo, ttlSeconds, onError 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
 
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find(type => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(stream, {
+        ...(mimeType ? { mimeType } : {}),
+        // Voice note ưu tiên dung lượng vừa phải; audio đã được codec nén, không gzip lại.
+        audioBitsPerSecond: 48000,
+      });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
@@ -65,7 +71,7 @@ export default function useVoiceRecorder({ onSend, replyTo, ttlSeconds, onError 
 
     recorder.onstop = async () => {
       try {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
 
         if (audioBlob.size > MAX_AUDIO_SIZE) {
           onError('Tin nhắn thoại không được vượt quá 10MB');
@@ -76,7 +82,7 @@ export default function useVoiceRecorder({ onSend, replyTo, ttlSeconds, onError 
 
         // Mã hóa E2EE + upload ciphertext do ChatWindow đảm nhận (cần đúng session/sender key
         // của phòng) — giống luồng ảnh, hook chỉ đưa Blob thô cho onSend.
-        await onSend(audioBlob, replyTo?._id, 'audio', null, ttlSeconds);
+        await onSend(audioBlob, replyTo?._id, 'audio', `voice-note.${audioBlob.type.includes('mp4') ? 'm4a' : 'webm'}`, ttlSeconds);
 
       } catch (err) {
         console.error('Lỗi khi tải tệp âm thanh lên:', err);

@@ -1,5 +1,5 @@
 /**
- * Mã hóa nhóm (Sender Key) — 1 khóa AES tĩnh/thiết bị gửi/epoch, KHÔNG RSA-wrap mỗi tin nhắn
+ * Mã hóa phòng (Sender Key) — 1 khóa AES tĩnh/thiết bị gửi/epoch, KHÔNG RSA-wrap mỗi tin nhắn
  * như sessionKey.js, chỉ AES-GCM bằng Sender Key đã có sẵn (phân phối 1 lần khi tạo/khi đổi
  * epoch qua wrapKeyForDevices tái dùng từ sessionKey.js).
  * Xem CLAUDE.md/plan "Sender Key cho mã hóa nhóm" — đánh đổi có chủ đích: khóa tĩnh theo epoch,

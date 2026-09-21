@@ -47,7 +47,7 @@ export default function ChatBackgroundPicker({ room, chatBackground, chatBackgro
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
         className="mb-4 w-full h-20 rounded-xl border border-dashed border-primary/50 bg-base-200/60 overflow-hidden flex items-center justify-center text-sm font-semibold text-primary disabled:opacity-60"
-        style={chatBackgroundImage ? { backgroundImage: `linear-gradient(rgb(0 0 0 / 35%), rgb(0 0 0 / 35%)), url(\"${chatBackgroundImage}\")`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+        style={chatBackgroundImage ? { backgroundImage: `linear-gradient(rgb(0 0 0 / 35%), rgb(0 0 0 / 35%)), url("${chatBackgroundImage}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
       >
         <span className={chatBackgroundImage ? 'text-white' : ''}>{uploading ? 'Đang tải ảnh...' : chatBackgroundImage ? 'Đổi ảnh nền' : '+ Tải ảnh nền'}</span>
       </button>

@@ -1,9 +1,11 @@
 import { ChevronDown } from '../icons';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { MessageCircleIcon } from '@hugeicons/core-free-icons';
 import MessageItem from './MessageItem';
 import Button from '../common/Button';
 
 export default function MessageList({
-  containerRef, onScroll, hasMore, onLoadMore, backgroundStyle,
+  containerRef, onScroll, hasMore, backgroundStyle,
   messages, onReact, onReply, isDM, partnerReadAt, onForwardClick, onEdit, onViewProfile,
   canPin, pinnedMessageId, onPinMessage, onUnpinMessage, onPollVote, messageTextColor,
   typing, bottomRef, showScrollBottom, onScrollToBottom,
@@ -16,11 +18,7 @@ export default function MessageList({
         className={`flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 hide-scrollbar ${backgroundStyle ? '' : 'bg-base-100'}`}
         style={backgroundStyle || undefined}
       >
-        {hasMore && (
-          <Button size="sm" pill className="bg-base-200 self-center mb-4" onClick={onLoadMore}>
-            Xem tin nhắn cũ hơn
-          </Button>
-        )}
+        {hasMore && <p className="self-center mb-4 text-xs text-base-content/50">Cuộn lên để tải tin nhắn cũ</p>}
 
         <div className="flex flex-col gap-1.5">
           {messages.map((msg, idx) => {
@@ -48,8 +46,8 @@ export default function MessageList({
         </div>
 
         {typing.length > 0 && (
-          <p className="text-[11px] text-base-content/40 italic mt-1 px-4">
-            💬 {typing.join(', ')} đang nhập...
+          <p className="text-[11px] text-base-content/40 italic mt-1 px-4 flex items-center gap-1">
+            <HugeiconsIcon icon={MessageCircleIcon} size={13} strokeWidth={1.8} />{typing.join(', ')} đang nhập...
           </p>
         )}
         <div ref={bottomRef} />

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Cancel01Icon } from '@hugeicons/core-free-icons';
 import { forgotPassword, verifyResetOtp, resetPassword } from '../../api/auth.api';
 import Turnstile from '../common/Turnstile';
 import Button from '../common/Button';
@@ -132,8 +134,8 @@ export default function ForgotPasswordModal({ isOpen, onClose, onSuccess }) {
   return (
     <div className="modal modal-open bg-black/50 backdrop-blur-sm z-50">
       <div className="modal-box relative max-w-md bg-base-100 p-6 rounded-2xl shadow-2xl border border-base-300">
-        <Button onClick={handleClose} size="sm" circle className="absolute right-4 top-4">
-          ✕
+        <Button onClick={handleClose} size="sm" circle className="absolute right-4 top-4" aria-label="Đóng">
+          <HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={1.8} />
         </Button>
 
         <h3 className="text-xl font-bold text-center text-primary mb-1">

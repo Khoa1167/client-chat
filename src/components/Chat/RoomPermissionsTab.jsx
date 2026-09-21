@@ -4,7 +4,7 @@ import Modal from '../common/Modal';
 
 // Thêm một mục ở đây khi UI có quyền mới. Server vẫn cần khai báo cùng key trong ROOM_PERMISSIONS.
 const PERMISSIONS = [
-  { key: 'pin_messages', label: 'Ghim tin nhắn', adminHas: false },
+  { key: 'pin_messages', label: 'Ghim tin nhắn', adminHas: true },
   { key: 'create_polls', label: 'Tạo cuộc khảo sát', adminHas: true },
 ];
 

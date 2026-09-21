@@ -1,34 +1,33 @@
 import { useMemo } from 'react';
 import {
-  encryptMessageForRoom, getDeviceId,
+  getDeviceId,
   generateSenderKey, wrapSenderKeyForDevices,
   encryptWithSenderKey, storeSenderKey, getSenderKey,
-  createSessionKeyEnvelope, encryptTextWithKey, encryptFileWithKey,
+  encryptTextWithKey, encryptFileWithKey,
 } from '../../crypto';
-import { distributeSenderKey, uploadEncryptedFile } from '../../api/rooms.api';
-import { getUsersDevicesBatch } from '../../api/users.api';
+import { distributeSenderKey, getRoomDevices, uploadEncryptedAttachment } from '../../api/rooms.api';
+import { saveAttachmentCiphertext } from '../../storage/attachmentStore';
 
 export const FILE_UPLOAD_CONFIG = {
-  image: { uploadPath: '/rooms/upload-image', fieldName: 'image' },
-  audio: { uploadPath: '/rooms/upload-audio', fieldName: 'audio' },
-  file:  { uploadPath: '/rooms/upload-file',  fieldName: 'file' },
+  image: { maxCiphertextSize: 10 * 1024 * 1024 },
+  audio: { maxCiphertextSize: 10 * 1024 * 1024 },
+  file:  { maxCiphertextSize: 25 * 1024 * 1024 },
 };
 
-// Logic mã hóa E2EE 1 phòng (DM: RSA-per-device, nhóm: Sender Key), tách khỏi ChatWindow — nhận
+function inferMimeType(fileName, mimeType) {
+  if (mimeType) return mimeType;
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  return ({ txt: 'text/plain', csv: 'text/csv', json: 'application/json', md: 'text/markdown', xml: 'application/xml', yaml: 'text/yaml', yml: 'text/yaml' })[extension] || '';
+}
+
+// Logic mã hóa E2EE 1 phòng bằng Sender Key theo thiết bị gửi/epoch, tách khỏi ChatWindow — nhận
 // roomToUse làm tham số thay vì closure qua props/state. useMemo(...,[]) giữ identity hàm ổn định
 // để effect trong useRoomManagement (dùng các hàm này làm dep) không chạy lại mỗi lần render.
-function createRoomEncryption() {
+function createRoomEncryption(userId) {
   const fetchRoomDevicePublicKeys = async (roomToUse) => {
-    if (!roomToUse?.members?.length) return [];
-
-    try {
-      const userIds = roomToUse.members.map(m => m._id);
-      const devices = await getUsersDevicesBatch(userIds);
-      return Array.isArray(devices) ? devices : [];
-    } catch (err) {
-      console.warn('Lỗi khi lấy public key thiết bị của phòng:', err);
-      return [];
-    }
+    if (!roomToUse?._id) throw new Error('Phòng không hợp lệ');
+    const devices = await getRoomDevices(roomToUse._id);
+    return Array.isArray(devices) ? devices : [];
   };
 
   // Lấy/tạo Sender Key cho (phòng, thiết bị, epoch) — tạo mới thì RSA-wrap phân phối cho cả phòng rồi cache lại.
@@ -47,48 +46,31 @@ function createRoomEncryption() {
     return { senderKey, epoch };
   };
 
-  // Mã hóa nội dung cho 1 phòng — DM giữ nguyên RSA-per-device, phòng nhóm dùng Sender Key
+  // Mã hóa nội dung cho mọi phòng bằng Sender Key đã phân phối theo epoch.
   const encryptForRoom = async (roomToUse, text, epochOverride) => {
-    if (roomToUse.isDM) {
-      const allDevicePublicKeys = await fetchRoomDevicePublicKeys(roomToUse);
-      const enc = await encryptMessageForRoom(text, allDevicePublicKeys);
-      return { content: enc.content, iv: enc.iv, tag: enc.tag, encryptedKeys: enc.encryptedKeys };
-    }
-
     const { senderKey, epoch } = await getOrCreateOutboundSenderKey(roomToUse, epochOverride);
     const enc = await encryptWithSenderKey(text, senderKey);
     return { content: enc.content, iv: enc.iv, tag: enc.tag, encryptedKeys: {}, scheme: 'sender-key', senderDeviceId: getDeviceId(), epoch };
   };
 
-  // Mã hóa file đính kèm bằng ĐÚNG key encryptForRoom dùng (không RSA-wrap key riêng). Ciphertext
-  // lên Cloudinary dạng 'raw'; content tin nhắn đổi từ URL trần thành JSON {url, iv}.
-  const encryptFileForRoom = async (roomToUse, arrayBuffer, uploadPath, fieldName, epochOverride) => {
-    let aesKey;
-    let encryptedKeys = {};
-    let scheme, senderDeviceId, epoch;
+  // Nén có điều kiện → padding → AES-GCM trước khi upload trực tiếp R2. Pointer attachment
+  // (id, IV, tên/MIME) tiếp tục được mã hóa trong message nên backend không đọc được metadata đó.
+  const encryptFileForRoom = async (roomToUse, arrayBuffer, type, { fileName = '', mimeType = '' } = {}, epochOverride) => {
+    const out = await getOrCreateOutboundSenderKey(roomToUse, epochOverride);
+    const aesKey = out.senderKey;
 
-    if (roomToUse.isDM) {
-      const allDevicePublicKeys = await fetchRoomDevicePublicKeys(roomToUse);
-      const envelope = await createSessionKeyEnvelope(allDevicePublicKeys);
-      aesKey = envelope.sessionKey;
-      encryptedKeys = envelope.encryptedKeys;
-    } else {
-      const out = await getOrCreateOutboundSenderKey(roomToUse, epochOverride);
-      aesKey = out.senderKey;
-      scheme = 'sender-key';
-      senderDeviceId = getDeviceId();
-      epoch = out.epoch;
-    }
+    const config = FILE_UPLOAD_CONFIG[type];
+    if (!config) throw new Error('Loại attachment không hợp lệ');
+    const resolvedMimeType = inferMimeType(fileName, mimeType);
+    const { ciphertext, iv: fileIv } = await encryptFileWithKey(arrayBuffer, aesKey, {
+      mimeType: resolvedMimeType,
+      maxCiphertextSize: config.maxCiphertextSize,
+    });
+    const attachmentId = await uploadEncryptedAttachment(roomToUse._id, type, ciphertext);
+    if (userId) await saveAttachmentCiphertext(userId, roomToUse._id, attachmentId, ciphertext).catch(() => {});
+    const enc = await encryptTextWithKey(JSON.stringify({ attachmentId, iv: fileIv, name: fileName, mimeType: resolvedMimeType }), aesKey);
 
-    const { ciphertext, iv: fileIv } = await encryptFileWithKey(arrayBuffer, aesKey);
-
-    const formData = new FormData();
-    formData.append(fieldName, new Blob([ciphertext]), 'encrypted.bin');
-    const data = await uploadEncryptedFile(uploadPath, formData);
-
-    const enc = await encryptTextWithKey(JSON.stringify({ url: data.url, iv: fileIv }), aesKey);
-
-    return { content: enc.content, iv: enc.iv, tag: enc.tag, encryptedKeys, scheme, senderDeviceId, epoch };
+    return { content: enc.content, iv: enc.iv, tag: enc.tag, encryptedKeys: {}, scheme: 'sender-key', senderDeviceId: getDeviceId(), epoch: out.epoch, attachmentId };
   };
 
   // Phân phối lại Sender Key (cùng epoch) cho thiết bị/thành viên mới, nếu mình đang giữ outbound key.
@@ -114,6 +96,6 @@ function createRoomEncryption() {
   };
 }
 
-export default function useRoomEncryption() {
-  return useMemo(() => createRoomEncryption(), []);
+export default function useRoomEncryption(userId) {
+  return useMemo(() => createRoomEncryption(userId), [userId]);
 }

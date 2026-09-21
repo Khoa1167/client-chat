@@ -3,7 +3,6 @@
   "appName": "Chat App",
   "webDir": "dist",
   "server": {
-    "url": "https://dev-a-virtualyourself.workers.dev",
     "androidScheme": "https"
   }
 }

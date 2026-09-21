@@ -1,20 +1,28 @@
 import { useRef, useState } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { MessageCircleIcon, Search01Icon, Image02Icon } from '@hugeicons/core-free-icons';
 import {
   RotateCw, LogOut, UserX, Link2, UserPlus, Check, X, Pencil, Palette, Trash2, KeyRound,
 } from '../icons';
 import Button from '../common/Button';
 import RoomPermissionsTab from './RoomPermissionsTab';
+import SearchBar from './SearchBar';
+import MediaGalleryTab from './MediaGalleryTab';
+import BlockUserButton from '../common/BlockUserButton';
 
 export default function RoomDrawer({
-  room, dmPartner, displayName, dmPartnerOnline, roomAvatar, roomIsPrivate,
+  room, dmPartner, blockedByMe, displayName, dmPartnerOnline, roomAvatar, roomIsPrivate,
   isOwner, isAdmin, user, ownerId, admins, grantedPermissions, drawerWidth,
   roomMembers, onlineMembers, offlineMembers, hiddenStatusMembers,
   joinRequests, showJoinRequests, onToggleJoinRequests, onApproveRequest, onRejectRequest,
   onOpenSettings, onOpenBackground, onOpenInvite, onRotateKey,
   onViewProfile, setConfirmAction, onLeaveClick, onClose,
+  messages, onSelectMessage, hasMore, loadMore,
 }) {
-  // 'members' (mặc định, ai cũng thấy) | 'permissions' (chỉ chủ phòng — role, quyền lẻ và chuyển chủ phòng).
-  const [activeTab, setActiveTab] = useState('members');
+  // 'search' | 'gallery' (DM lẫn nhóm) | 'members' | 'permissions' (chỉ nhóm — role, quyền lẻ và chuyển chủ phòng).
+  const [activeTab, setActiveTab] = useState(room.isDM ? 'search' : 'members');
+  // DM không có Thành viên/Quản lý quyền — rơi về Tìm nếu tab cũ không còn hợp lệ.
+  const effectiveTab = room.isDM && (activeTab === 'members' || activeTab === 'permissions') ? 'search' : activeTab;
   const swipeStart = useRef(null);
 
   const handleSwipeStart = (event) => {
@@ -123,8 +131,8 @@ export default function RoomDrawer({
               </div>
             </div>
           ) : (
-            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-primary to-secondary text-primary-content flex items-center justify-center font-bold text-4xl">
-              💬
+            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-primary to-secondary text-primary-content flex items-center justify-center">
+              <HugeiconsIcon icon={MessageCircleIcon} size={36} strokeWidth={1.8} />
             </div>
           )}
           <div className="flex items-center gap-1.5 mt-2">
@@ -158,9 +166,14 @@ export default function RoomDrawer({
           <Palette className="w-3.5 h-3.5" /> Đổi chủ đề
         </Button>
 
+        {room.isDM && dmPartner && blockedByMe !== undefined && (
+          <BlockUserButton userId={dmPartner._id} displayName={displayName}
+            blocked={blockedByMe} className="w-full" />
+        )}
+
         <div className="divider my-0 w-full" />
 
-        {/* Mục thành viên (Nếu không phải DM) */}
+        {/* Mời/Xoay khóa/Yêu cầu tham gia — chỉ áp dụng phòng nhóm */}
         {!room.isDM && (
           <div className="w-full flex flex-col gap-4">
             <div className="flex items-center gap-1 px-1 min-w-0">
@@ -227,35 +240,76 @@ export default function RoomDrawer({
                 <div className="divider my-1" />
               </div>
             )}
+          </div>
+        )}
 
-            {isOwner && (
-              <div className="tabs tabs-boxed tabs-sm bg-base-200/50 w-full">
-                <a className={`tab ${activeTab === 'members' ? 'tab-active' : ''}`} onClick={() => setActiveTab('members')}>
-                  Thành viên
-                </a>
-                <a className={`tab gap-1 ${activeTab === 'permissions' ? 'tab-active' : ''}`} onClick={() => setActiveTab('permissions')}>
-                  <KeyRound className="w-3.5 h-3.5" /> Quản lý quyền
-                </a>
-              </div>
+        {/* Tìm/Kho lưu trữ — chung DM và nhóm; Thành viên/Quản lý quyền chỉ nhóm */}
+        <div className="w-full flex flex-col gap-4">
+          <div className="tabs tabs-boxed tabs-sm bg-base-200/50 w-full">
+            <a className={`tab ${effectiveTab === 'search' ? 'tab-active' : ''}`} onClick={() => setActiveTab('search')}>
+              <HugeiconsIcon icon={Search01Icon} size={14} /> Tìm
+            </a>
+            <a className={`tab gap-1 ${effectiveTab === 'gallery' ? 'tab-active' : ''}`} onClick={() => setActiveTab('gallery')}>
+              <HugeiconsIcon icon={Image02Icon} size={14} /> Kho lưu trữ
+            </a>
+            {!room.isDM && (
+              <a className={`tab ${effectiveTab === 'members' ? 'tab-active' : ''}`} onClick={() => setActiveTab('members')}>
+                Thành viên
+              </a>
             )}
-
-            {activeTab === 'permissions' && isOwner ? (
-              <RoomPermissionsTab
-                roomMembers={roomMembers}
-                ownerId={ownerId}
-                admins={admins}
-                grantedPermissions={grantedPermissions}
-                user={user}
-                setConfirmAction={setConfirmAction}
-              />
-            ) : (
-              <ul className="menu menu-sm p-0 gap-1 max-h-64 overflow-y-auto hide-scrollbar flex-nowrap">
-                {onlineMembers.map(m => renderMemberRow(m, 'online'))}
-                {(hiddenStatusMembers || []).map(m => renderMemberRow(m, 'hidden'))}
-                {offlineMembers.map(m => renderMemberRow(m, 'offline'))}
-              </ul>
+            {!room.isDM && isOwner && (
+              <a className={`tab gap-1 ${effectiveTab === 'permissions' ? 'tab-active' : ''}`} onClick={() => setActiveTab('permissions')}>
+                <KeyRound className="w-3.5 h-3.5" /> Quản lý quyền
+              </a>
             )}
+          </div>
 
+          {effectiveTab === 'search' && (
+            <SearchBar
+              messages={messages || []}
+              hasMore={hasMore}
+              loadMore={loadMore}
+              onSelectMessage={(msgId) => {
+                onSelectMessage?.(msgId);
+                setActiveTab(room.isDM ? 'search' : 'members');
+              }}
+              onClose={() => setActiveTab(room.isDM ? 'search' : 'members')}
+            />
+          )}
+
+          {effectiveTab === 'gallery' && (
+            <MediaGalleryTab
+              room={room}
+              active={effectiveTab === 'gallery'}
+              onSelectMessage={(msgId) => {
+                onSelectMessage?.(msgId);
+              }}
+            />
+          )}
+
+          {effectiveTab === 'permissions' && !room.isDM && isOwner && (
+            <RoomPermissionsTab
+              roomMembers={roomMembers}
+              ownerId={ownerId}
+              admins={admins}
+              grantedPermissions={grantedPermissions}
+              user={user}
+              setConfirmAction={setConfirmAction}
+            />
+          )}
+
+          {effectiveTab === 'members' && !room.isDM && (
+            <ul className="menu menu-sm p-0 gap-1 max-h-64 overflow-y-auto hide-scrollbar flex-nowrap">
+              {onlineMembers.map(m => renderMemberRow(m, 'online'))}
+              {(hiddenStatusMembers || []).map(m => renderMemberRow(m, 'hidden'))}
+              {offlineMembers.map(m => renderMemberRow(m, 'offline'))}
+            </ul>
+          )}
+        </div>
+
+        {/* Rời nhóm/Hủy phòng — chỉ áp dụng phòng nhóm */}
+        {!room.isDM && (
+          <div className="w-full flex flex-col gap-4">
             <Button
               onClick={onLeaveClick}
               variant="soft-error" size="sm" className="gap-1.5 w-full"

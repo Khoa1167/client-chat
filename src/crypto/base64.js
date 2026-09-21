@@ -1,4 +1,4 @@
-// Helper Base64 <-> ArrayBuffer dùng chung bởi sessionKey/senderKey/attachmentCrypto/keyBackup —
+// Helper Base64 <-> ArrayBuffer dùng chung bởi sessionKey/senderKey/attachmentCrypto —
 // tách riêng vì không thuộc trách nhiệm domain nào trong 6 module crypto, chỉ là encode thuần túy.
 
 export function arrayBufferToBase64(buffer) {

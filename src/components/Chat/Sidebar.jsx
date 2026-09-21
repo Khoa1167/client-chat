@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { MessageCircleIcon } from '@hugeicons/core-free-icons';
 import { Search, Plus, QrCode } from '../icons';
 import QRScannerModal from './QRScannerModal';
 import Tabs from '../common/Tabs';
@@ -12,7 +14,7 @@ import {
 } from '../../api/rooms.api';
 import { getFriends, getDmRoom } from '../../api/friends.api';
 import {
-  decryptMessage, getDeviceId, getPrivateKey, getHistoryKey, listHistoryKeyIds,
+  getDeviceId, getPrivateKey, getHistoryKey, listHistoryKeyIds,
   unwrapSenderKey, decryptWithSenderKey, storeSenderKey, getSenderKey,
 } from '../../crypto';
 
@@ -21,14 +23,9 @@ const getDMPartner = (room, currentUser) => {
   return room.members.find(m => m._id?.toString() !== currentUser._id?.toString());
 };
 
-// Giải mã tin nhắn preview (lastMessage) — tự nhận diện scheme (RSA-per-device cũ/DM, hay Sender
-// Key cho nhóm). Trùng lặp có chủ đích với ChatWindow.jsx (Sidebar vốn đã tự giải mã riêng).
+// Giải mã preview bằng Sender Key. Sidebar tự giải mã độc lập với ChatWindow.
 const decryptRoomMessage = async (msg, roomId) => {
   const devId = getDeviceId();
-  if (msg.scheme !== 'sender-key') {
-    return decryptMessage(msg, devId);
-  }
-
   try {
     let senderKey = await getSenderKey(roomId, msg.senderDeviceId, msg.epoch);
     if (!senderKey) {
@@ -390,8 +387,8 @@ export default function Sidebar({ activeRoom, onSelectRoom }) {
                       </div>
                     </div>
                   ) : (
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-primary to-secondary text-primary-content flex items-center justify-center font-bold text-base flex-shrink-0">
-                      💬
+                    <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-primary to-secondary text-primary-content flex items-center justify-center flex-shrink-0">
+                      <HugeiconsIcon icon={MessageCircleIcon} size={22} strokeWidth={1.8} />
                     </div>
                   )}
 

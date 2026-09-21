@@ -9,16 +9,41 @@ import ConfirmModal from '../common/ConfirmModal';
 import Spinner from '../common/Spinner';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../hooks/useSocket';
+import { Capacitor } from '@capacitor/core';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { CryingIcon, HappyIcon, InLoveIcon, LaughingIcon, SurpriseIcon } from '@hugeicons/core-free-icons';
+import { AlertCircleIcon, CryingIcon, Download01Icon, File01Icon, HappyIcon, InLoveIcon, LaughingIcon, ReplyIcon, SurpriseIcon } from '@hugeicons/core-free-icons';
 import ReportModal from './ReportModal';
-import { decryptFileWithKey } from '../../crypto';
-import { transcribeAudio } from '../../api/speech.api';
 import { isOnDeviceEnabled, transcribeOnDevice } from '../../utils/onDeviceTranscriber';
+import {
+  attachmentPointer, getDecryptedAttachmentBlob, saveDecryptedBlob, attachmentFileName,
+} from '../../utils/attachmentDecrypt';
 
-// File E2EE: content giải mã chỉ là {url, iv} trỏ ciphertext trên Cloudinary, cần tải + giải mã
-// thêm 1 bước bằng message.__key mới ra file thật — hook chung lo vòng đời async đó.
-function useDecryptedBlob(message) {
+function useAttachmentVisibility() {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const target = ref.current;
+    if (!target || !('IntersectionObserver' in window)) {
+      setVisible(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, visible];
+}
+
+// Tải ciphertext R2 qua URL ngắn hạn, giải mã và bỏ padding/nén hoàn toàn ở client.
+function useDecryptedBlob(message, shouldLoad) {
+  const { user } = useAuth();
   const [blobUrl, setBlobUrl] = useState(null);
   const [blob, setBlob] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -28,15 +53,10 @@ function useDecryptedBlob(message) {
     let objectUrl = null;
 
     (async () => {
-      if (!message.__key) { setFailed(true); return; }
+        if (!shouldLoad || !message.__key || !attachmentPointer(message)) return;
       try {
-        const { url, iv } = JSON.parse(message.decryptedText || message.content);
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Không tải được file');
-        const ciphertextBuf = await res.arrayBuffer();
-        const plainBuf = await decryptFileWithKey(ciphertextBuf, iv, message.__key);
+        const { blob: plainBlob } = await getDecryptedAttachmentBlob(message, user._id);
         if (cancelled) return;
-        const plainBlob = new Blob([plainBuf]);
         objectUrl = URL.createObjectURL(plainBlob);
         setBlob(plainBlob);
         setBlobUrl(objectUrl);
@@ -50,82 +70,79 @@ function useDecryptedBlob(message) {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [message.__key, message.decryptedText, message.content]);
+  }, [shouldLoad, user?._id, message]);
 
   return { blobUrl, blob, failed };
 }
 
 function EncryptedImage({ message, className, onClick }) {
-  const { blobUrl, failed } = useDecryptedBlob(message);
+  const [attachmentRef, visible] = useAttachmentVisibility();
+  const { blobUrl, failed } = useDecryptedBlob(message, visible);
 
   if (failed) {
     return (
-      <div className={`${className} flex items-center justify-center bg-base-200 text-xs text-base-content/50 text-center p-2`}>
-        ⚠️ Không thể giải mã ảnh
+      <div ref={attachmentRef} className={`${className} flex items-center justify-center gap-1 bg-base-200 text-xs text-base-content/50 text-center p-2`}>
+        <HugeiconsIcon icon={AlertCircleIcon} size={14} strokeWidth={1.8} /> Không thể giải mã ảnh
       </div>
     );
   }
 
   if (!blobUrl) {
     return (
-      <div className={`${className} flex items-center justify-center bg-base-200`}>
+      <div ref={attachmentRef} className={`${className} flex items-center justify-center bg-base-200`}>
         <Spinner size="sm" className="text-base-content/40" />
       </div>
     );
   }
 
-  return <img src={blobUrl} alt="Hình ảnh đính kèm" className={className} onClick={onClick} />;
+  return <img ref={attachmentRef} src={blobUrl} alt="Hình ảnh đính kèm" className={className} onClick={onClick} />;
 }
 
 function EncryptedAudio({ message, className }) {
-  const { blobUrl, blob, failed } = useDecryptedBlob(message);
+  const [attachmentRef, visible] = useAttachmentVisibility();
+  const { blobUrl, blob, failed } = useDecryptedBlob(message, visible);
   const [transcript, setTranscript] = useState(null);
   const [transcribing, setTranscribing] = useState(false);
   const [transcribeError, setTranscribeError] = useState(false);
-  const transcribeAbortRef = useRef(null);
 
   const onDevice = isOnDeviceEnabled();
 
   const handleTranscribe = async () => {
     if (!blob) return;
-    const controller = new AbortController();
-    transcribeAbortRef.current = controller;
     setTranscribing(true);
     setTranscribeError(false);
     try {
-      const text = onDevice ? await transcribeOnDevice(blob) : (await transcribeAudio(blob, controller.signal)).text;
-      setTranscript(text);
+      setTranscript(await transcribeOnDevice(blob));
     } catch (err) {
       console.error('[Transcribe] Lỗi:', err);
-      if (err.name !== 'CanceledError' && err.name !== 'AbortError') setTranscribeError(true);
+      setTranscribeError(true);
     } finally {
-      if (transcribeAbortRef.current === controller) transcribeAbortRef.current = null;
       setTranscribing(false);
     }
   };
 
   if (failed) {
     return (
-      <div className={`${className} flex items-center text-xs text-error/80 font-semibold px-2`}>
-        ⚠️ Không thể giải mã tin nhắn thoại
+      <div ref={attachmentRef} className={`${className} flex items-center gap-1 text-xs text-error/80 font-semibold px-2`}>
+        <HugeiconsIcon icon={AlertCircleIcon} size={14} strokeWidth={1.8} /> Không thể giải mã tin nhắn thoại
       </div>
     );
   }
 
   if (!blobUrl) {
     return (
-      <div className={`${className} flex items-center px-2`}>
+      <div ref={attachmentRef} className={`${className} flex items-center px-2`}>
         <Spinner size="sm" className="text-base-content/40" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div ref={attachmentRef} className="flex flex-col gap-1">
       <audio src={blobUrl} controls className={className} />
       {transcript ? (
         <p className="text-xs px-1">{transcript}</p>
-      ) : (
+      ) : onDevice ? (
         <div className="flex flex-col gap-0.5 px-1">
           <button
             type="button"
@@ -133,58 +150,59 @@ function EncryptedAudio({ message, className }) {
             disabled={transcribing}
             className="text-[11px] text-primary hover:underline font-semibold cursor-pointer text-left w-fit disabled:opacity-50"
           >
-            {transcribing
-              ? (onDevice ? 'Đang xử lý trên máy... (lần đầu có thể mất chút thời gian để tải model)' : 'Đang chuyển thành văn bản...')
-              : 'Xem bản dịch chữ'}
+            {transcribing ? 'Đang xử lý trên máy... (lần đầu có thể mất chút thời gian để tải model)' : 'Xem bản dịch chữ'}
           </button>
-          {transcribing && !onDevice && (
-            <button type="button" onClick={() => transcribeAbortRef.current?.abort()} className="text-[11px] text-base-content/60 hover:underline text-left w-fit">
-              Hủy chuyển thành văn bản
-            </button>
-          )}
           {transcribeError && (
             <span className="text-[11px] text-error">Không thể chuyển thành văn bản, thử lại</span>
           )}
-          <span className="text-[10px] text-base-content/40">
-            {onDevice
-              ? 'Xử lý ngay trên thiết bị này — audio không rời khỏi máy'
-              : 'Gửi bản ghi âm đã giải mã tới dịch vụ AI ngoài — không còn E2EE cho bước này'}
-          </span>
+          <span className="text-[10px] text-base-content/40">Xử lý ngay trên thiết bị này — audio không rời khỏi máy</span>
         </div>
+      ) : (
+        <span className="text-[10px] text-base-content/40 px-1">
+          Bật "Phiên âm giọng nói trên thiết bị" trong Cài đặt để xem bản dịch chữ
+        </span>
       )}
     </div>
   );
 }
 
-// Server chỉ nhận ciphertext nên không biết mimetype thật — tự đoán theo đuôi file để Blob render đúng.
-const EXT_MIME_MAP = {
-  pdf: 'application/pdf',
-  doc: 'application/msword',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  xls: 'application/vnd.ms-excel',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  ppt: 'application/vnd.ms-powerpoint',
-  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  zip: 'application/zip',
-  rar: 'application/vnd.rar',
-  txt: 'text/plain',
-  csv: 'text/csv',
-  json: 'application/json',
-  mp4: 'video/mp4',
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  webp: 'image/webp',
-};
-function guessMimeType(fileName) {
-  const ext = fileName?.split('.').pop()?.toLowerCase();
-  return EXT_MIME_MAP[ext] || 'application/octet-stream';
+function EncryptedAttachmentDownload({ message, className, title = 'Tải xuống' }) {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+
+  const handleDownload = async () => {
+    if (loading) return;
+    const pointer = attachmentPointer(message);
+    const fileName = attachmentFileName(message, pointer);
+    setLoading(true);
+    try {
+      // Web cần mở picker trong click đồng bộ; Android luôn lưu vào Downloads mặc định.
+      const fileHandle = !Capacitor.isNativePlatform() && typeof window.showSaveFilePicker === 'function'
+        ? await window.showSaveFilePicker({ suggestedName: fileName })
+        : null;
+      const { blob } = await getDecryptedAttachmentBlob(message, user._id);
+      if (await saveDecryptedBlob(blob, fileName, fileHandle)) toast.success('Đã tải xuống');
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        console.error('[E2EE] Tải file thất bại:', err);
+        toast.error('Không thể tải file');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button type="button" onClick={handleDownload} disabled={loading} className={className} title={title} aria-label={title}>
+      <HugeiconsIcon icon={Download01Icon} size={16} strokeWidth={1.8} />
+    </button>
+  );
 }
 
 // File chung (tới 50MB) chỉ giải mã khi bấm mở, không tự tải như ảnh/audio. Mở tab trắng NGAY lúc
 // click (đồng bộ) rồi set location sau khi giải mã — mở sau await dễ bị trình duyệt chặn popup.
 function EncryptedFileLink({ message, className, title, children }) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -196,13 +214,8 @@ function EncryptedFileLink({ message, className, title, children }) {
     const newTab = window.open('', '_blank');
 
     try {
-      if (!message.__key) throw new Error('Không có khóa giải mã');
-      const { url, iv } = JSON.parse(message.decryptedText || message.content);
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Không tải được file');
-      const ciphertextBuf = await res.arrayBuffer();
-      const plainBuf = await decryptFileWithKey(ciphertextBuf, iv, message.__key);
-      const blobUrl = URL.createObjectURL(new Blob([plainBuf], { type: guessMimeType(message.fileName) }));
+      const { blob: plainBlob } = await getDecryptedAttachmentBlob(message, user._id);
+      const blobUrl = URL.createObjectURL(plainBlob);
       if (newTab) {
         newTab.location.href = blobUrl;
       }
@@ -219,7 +232,7 @@ function EncryptedFileLink({ message, className, title, children }) {
 
   return (
     <button type="button" onClick={handleClick} disabled={loading} className={className} title={title}>
-      {loading ? 'Đang giải mã...' : failed ? '⚠️ Lỗi giải mã, thử lại' : children}
+      {loading ? 'Đang giải mã...' : failed ? 'Lỗi giải mã, thử lại' : children}
     </button>
   );
 }
@@ -243,6 +256,7 @@ function MessageItem({ message, onReact, onReply, isDM, seenAt, onForwardClick, 
   const { emit } = useSocket();
   const isOwn = message.sender._id?.toString() === user._id?.toString();
   const senderName = message.sender.nickname || message.sender.username;
+  const currentAttachment = attachmentPointer(message);
 
   const [showActions, setShowActions] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -315,12 +329,16 @@ function MessageItem({ message, onReact, onReply, isDM, seenAt, onForwardClick, 
     try {
       const index = JSON.parse(vote).optionIndex;
       if (Number.isInteger(index)) counts[index] = (counts[index] || 0) + 1;
-    } catch {}
+    } catch {
+      // Poll payload không hợp lệ thì không cộng phiếu.
+    }
     return counts;
   }, {});
   const myPollVote = message.pollVotes?.[user._id?.toString()];
   let myPollOption = null;
-  try { myPollOption = JSON.parse(myPollVote).optionIndex; } catch {}
+  try { myPollOption = JSON.parse(myPollVote).optionIndex; } catch {
+    // Không có hoặc không đọc được phiếu của chính mình.
+  }
 
   const handleToggleActions = (e) => {
     e.stopPropagation();
@@ -424,7 +442,7 @@ function MessageItem({ message, onReact, onReply, isDM, seenAt, onForwardClick, 
 
       {message.forwardedFrom && (
         <div className={`flex items-center text-[10px] text-base-content/40 gap-1 mb-0.5 select-none ${isOwn ? 'mr-2' : 'ml-10'}`}>
-          <span>↪</span>
+          <HugeiconsIcon icon={ReplyIcon} size={12} strokeWidth={1.8} />
           <span>
             Chuyển tiếp từ{' '}
             <span className="font-semibold text-base-content/60">
@@ -506,19 +524,24 @@ function MessageItem({ message, onReact, onReply, isDM, seenAt, onForwardClick, 
                   ? 'bg-primary border-primary/70 text-primary-content'
                   : 'bg-base-200 border-base-300 text-base-content'
               }`}>
-                <span className="text-2xl select-none">📄</span>
+                <HugeiconsIcon icon={File01Icon} size={24} strokeWidth={1.8} className="shrink-0" />
                 <div className="flex flex-col min-w-0">
                   <EncryptedFileLink
                     message={message}
                     className={`text-[13px] font-semibold truncate hover:underline cursor-pointer text-left ${
                       isOwn ? 'text-primary-content' : 'text-primary'
                     }`}
-                    title={message.fileName || 'Mở file'}
+                    title={currentAttachment?.name || message.fileName || 'Mở file'}
                   >
-                    {message.fileName || 'Tệp đính kèm'}
+                    {currentAttachment?.name || message.fileName || 'Tệp đính kèm'}
                   </EncryptedFileLink>
                   <span className={`text-[10px] font-medium mt-0.5 ${isOwn ? 'text-primary-content/70' : 'text-base-content/40'} flex items-center gap-1`}>
                     Tệp đính kèm
+                    <EncryptedAttachmentDownload
+                      message={message}
+                      className="inline-flex items-center justify-center hover:opacity-70 disabled:opacity-50 cursor-pointer"
+                      title="Tải xuống tệp"
+                    />
                   </span>
                 </div>
               </div>
@@ -669,7 +692,7 @@ function MessageItem({ message, onReact, onReply, isDM, seenAt, onForwardClick, 
                     Chuyển tiếp
                   </button>
                 </li>
-                {canPin && !isDM && (
+                {canPin && (
                   <li>
                     <button onClick={handlePin} className="text-[11px] font-semibold">
                       {isPinned ? 'Bỏ ghim' : 'Ghim tin nhắn'}
@@ -712,7 +735,14 @@ function MessageItem({ message, onReact, onReply, isDM, seenAt, onForwardClick, 
 
       {showImageViewer && (
         <Modal onClose={() => setShowImageViewer(false)} boxClassName="p-0 bg-transparent shadow-none border-none max-w-3xl">
-          <EncryptedImage message={message} className="max-w-full max-h-[85vh] rounded-lg mx-auto" />
+          <div className="relative">
+            <EncryptedImage message={message} className="max-w-full max-h-[85vh] rounded-lg mx-auto" />
+            <EncryptedAttachmentDownload
+              message={message}
+              className="btn btn-circle btn-sm absolute top-2 right-2 bg-base-100/90 border-base-300 shadow-sm"
+              title="Tải xuống ảnh"
+            />
+          </div>
         </Modal>
       )}
 

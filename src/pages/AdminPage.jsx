@@ -4,7 +4,6 @@ import { format } from 'date-fns';
 import { ShieldAlert, AlertTriangle, Users2, Search, Lock, Unlock, ChevronLeft, ChevronRight } from '../components/icons';
 import IconRail from '../components/Chat/IconRail';
 import ProfileModal from '../components/Profile/ProfileModal';
-import KeyBackupModal from '../components/Settings/KeyBackupModal';
 import Modal from '../components/common/Modal';
 import Button from '../components/common/Button';
 import ConfirmModal from '../components/common/ConfirmModal';
@@ -89,8 +88,8 @@ function UsersPanel() {
   const latestQueryRef = useRef('');
   useEffect(() => {
     latestQueryRef.current = query;
-    setLoading(true);
     const timeout = setTimeout(async () => {
+      setLoading(true);
       try {
         const data = await listUsers({ q: query, page });
         if (latestQueryRef.current === query) {
@@ -236,7 +235,6 @@ export default function AdminPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [showProfile, setShowProfile] = useState(false);
-  const [showKeyBackup, setShowKeyBackup] = useState(false);
   const [view, setView] = useState('reports');
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -282,12 +280,11 @@ export default function AdminPage() {
   const filteredReports = tab === 'all' ? reports : reports.filter(r => r.status === tab);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-base-200 text-base-content">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-base-200 text-base-content">
       <IconRail
         onSelectChat={() => navigate('/')}
         onSelectFriends={() => navigate('/', { state: { view: 'friends' } })}
         onOpenProfile={() => setShowProfile(true)}
-        onOpenKeyBackup={() => setShowKeyBackup(true)}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto pb-16 md:pb-0">
@@ -455,7 +452,6 @@ export default function AdminPage() {
       )}
 
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
-      {showKeyBackup && <KeyBackupModal onClose={() => setShowKeyBackup(false)} />}
     </div>
   );
 }

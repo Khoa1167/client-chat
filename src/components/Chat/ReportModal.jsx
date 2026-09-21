@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Cancel01Icon } from '@hugeicons/core-free-icons';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Toast from '../common/Toast';
@@ -50,8 +52,8 @@ export default function ReportModal({ message, onClose, onSuccess }) {
           <h3 className="text-base font-bold flex items-center gap-1.5">
             🚩 Báo cáo tin nhắn vi phạm
           </h3>
-          <Button type="button" onClick={onClose} size="sm" circle>
-            ✕
+          <Button type="button" onClick={onClose} size="sm" circle aria-label="Đóng">
+            <HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={1.8} />
           </Button>
         </div>
 

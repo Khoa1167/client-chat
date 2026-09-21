@@ -1,7 +1,10 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { MessageCircleIcon } from '@hugeicons/core-free-icons';
 import { toast } from '../common/toastStore';
 import ConfirmModal from '../common/ConfirmModal';
 import { useAuth } from '../../context/AuthContext';
+import { useGroupCall } from '../../context/GroupCallContext';
 import { useSocket } from '../../hooks/useSocket';
 import ChatHeader from './ChatHeader';
 import MessageList from './MessageList';
@@ -18,6 +21,8 @@ import useChatMessages from '../../hooks/chat/useChatMessages';
 import useRoomEncryption from '../../hooks/chat/useRoomEncryption';
 import useRoomManagement from '../../hooks/chat/useRoomManagement';
 import { getMyRooms } from '../../api/rooms.api';
+import { getAttachmentDownloadUrl } from '../../api/rooms.api';
+import { getUserProfile } from '../../api/friends.api';
 import { decryptFileWithKey } from '../../crypto';
 import { getChatBackgroundStyle, getChatMessageColor } from '../../utils/chatBackgrounds';
 
@@ -26,9 +31,10 @@ const getDMPartner = (room, currentUser) => {
   return room.members.find(m => m._id?.toString() !== currentUser._id?.toString());
 };
 
-export default function ChatWindow({ room, onCloseChat, onBackToFriends, onInitiateCall, onViewProfile }) {
+export default function ChatWindow({ room, onCloseChat, onBackToFriends, onInitiateCall, onInitiateGroupCall, onViewProfile }) {
   const { user }          = useAuth();
   const { emit, on, isConnected, reconnectFailed } = useSocket();
+  const { activeCallRooms, callState: groupCallState } = useGroupCall();
   const { bottomRef, containerRef, showScrollBottom, scrollToBottom, handleScroll } = useChatScroll();
 
   // Desktop mở sẵn RoomDrawer làm cột thứ 4; mobile là overlay full màn hình nên mặc định đóng.
@@ -40,10 +46,11 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
   const [forwardTargetMessage, setForwardTargetMessage] = useState(null);
   const [showForward, setShowForward] = useState(false);
   const [drawerWidth, setDrawerWidth] = useState(300);
+  const [dmAccess, setDmAccess] = useState(null);
   const resizeStart = useRef(null);
   const mobileSwipeStart = useRef(null);
 
-  const { encryptForRoom, encryptFileForRoom, FILE_UPLOAD_CONFIG, fetchRoomDevicePublicKeys, redistributeSenderKey } = useRoomEncryption();
+  const { encryptForRoom, encryptFileForRoom, FILE_UPLOAD_CONFIG, fetchRoomDevicePublicKeys, redistributeSenderKey } = useRoomEncryption(user?._id);
 
   const {
     dmPartnerOnline, currentEpoch, roomMembers, admins, ownerId,
@@ -66,9 +73,45 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
   const {
     messages, hasMore, typing, replyTo, setReplyTo,
     loadMore, handleReact, handleTyping, handleEdit, handlePollVote, partnerReadAt,
-  } = useChatMessages(room, user, { emit, on, isConnected }, { bottomRef, encryptForRoom: encryptDraftForRoom });
+  } = useChatMessages(room, user, { emit, on, isConnected }, { bottomRef, containerRef, encryptForRoom: encryptDraftForRoom });
+
+  const handleMessageScroll = useCallback(() => {
+    handleScroll();
+    if (containerRef.current?.scrollTop <= 100) loadMore();
+  }, [containerRef, handleScroll, loadMore]);
 
   const roomId = room?._id;
+  const dmPartnerId = room?.isDM ? getDMPartner(room, user)?._id : null;
+  const currentDmAccess = dmAccess?.userId === dmPartnerId ? dmAccess : null;
+  const canContactDm = !room?.isDM || currentDmAccess?.friendshipStatus === 'accepted' && !currentDmAccess?.blockedByMe;
+
+  useEffect(() => {
+    if (!dmPartnerId) return;
+    let active = true;
+    let version = 0;
+    const loadProfile = () => {
+      const request = ++version;
+      getUserProfile(dmPartnerId)
+        .then(profile => {
+          if (active && request === version) setDmAccess({ userId: dmPartnerId, blockedByMe: profile.blockedByMe, friendshipStatus: profile.friendshipStatus });
+        })
+        .catch(() => { if (active && request === version) setDmAccess({ userId: dmPartnerId, blockedByMe: false, friendshipStatus: 'none' }); });
+    };
+    loadProfile();
+    const syncBlock = (event) => {
+      if (event.detail.userId === dmPartnerId) {
+        version++;
+        setDmAccess({ userId: dmPartnerId, blockedByMe: event.detail.blocked, friendshipStatus: 'none' });
+      }
+    };
+    const offAccepted = on('friend:request_accepted', loadProfile);
+    const offUnfriended = on('friend:unfriended', () => {
+      version++;
+      setDmAccess(prev => prev?.userId === dmPartnerId ? { ...prev, friendshipStatus: 'none' } : prev);
+    });
+    window.addEventListener('user:block_changed', syncBlock);
+    return () => { active = false; offAccepted(); offUnfriended(); window.removeEventListener('user:block_changed', syncBlock); };
+  }, [dmPartnerId, on]);
 
   const handleResizeStart = (event) => {
     if (event.button !== 0) return;
@@ -115,10 +158,12 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
 
     if (FILE_UPLOAD_CONFIG[type]) {
       // Ném ngược lỗi cho MessageInput báo đúng từng file khi gửi nhiều file 1 lúc.
-      const { uploadPath, fieldName } = FILE_UPLOAD_CONFIG[type];
       const arrayBuffer = await content.arrayBuffer();
-      const payload = await encryptFileForRoom(roomWithMembers, arrayBuffer, uploadPath, fieldName, currentEpoch);
-      emit('message:send', { roomId, ...payload, type, replyTo: replyToId, fileName, ttlSeconds });
+      const payload = await encryptFileForRoom(roomWithMembers, arrayBuffer, type, {
+        fileName: fileName || content.name || '',
+        mimeType: content.type || '',
+      }, currentEpoch);
+      emit('message:send', { roomId, ...payload, type, replyTo: replyToId, fileName: null, ttlSeconds });
       setReplyTo(null);
       return;
     }
@@ -166,12 +211,17 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
         if (!originalMsg.__key) {
           throw new Error('Không có khóa giải mã file gốc để chuyển tiếp.');
         }
-        const { uploadPath, fieldName } = FILE_UPLOAD_CONFIG[originalMsg.type];
-        const { url, iv } = JSON.parse(originalMsg.decryptedText || originalMsg.content);
+        const pointer = JSON.parse(originalMsg.decryptedText || originalMsg.content);
+        const url = await getAttachmentDownloadUrl(originalMsg.room?._id || originalMsg.room, pointer.attachmentId);
         const res = await fetch(url);
         const ciphertextBuf = await res.arrayBuffer();
-        const plainBuf = await decryptFileWithKey(ciphertextBuf, iv, originalMsg.__key);
-        payload = await encryptFileForRoom(targetRoom, plainBuf, uploadPath, fieldName);
+        const decrypted = await decryptFileWithKey(ciphertextBuf, pointer.iv, originalMsg.__key, {
+          maxOriginalSize: FILE_UPLOAD_CONFIG[originalMsg.type].maxCiphertextSize,
+        });
+        payload = await encryptFileForRoom(targetRoom, decrypted.arrayBuffer, originalMsg.type, {
+          fileName: pointer.name || '',
+          mimeType: pointer.mimeType || decrypted.mimeType,
+        });
       } else {
         payload = await encryptForRoom(targetRoom, originalMsg.content);
       }
@@ -180,7 +230,7 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
         roomId: targetRoomId,
         ...payload,
         type: originalMsg.type,
-        fileName: originalMsg.fileName,
+        fileName: null,
         forwardedFrom: originalMsg._id
       });
     } catch (err) {
@@ -194,7 +244,7 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
   if (!room) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-base-100 text-base-content/60 p-8 select-none">
-        <span className="text-6xl mb-4 opacity-30">💬</span>
+        <HugeiconsIcon icon={MessageCircleIcon} size={56} strokeWidth={1.8} className="mb-4 opacity-30" />
         <p className="text-lg font-bold text-base-content">Chào mừng bạn đến với Chat App!</p>
         <p className="text-sm opacity-70 mt-1">Chọn một phòng chat hoặc Bạn bè ở sidebar để bắt đầu trò chuyện.</p>
       </div>
@@ -254,8 +304,23 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
           onCloseChat={onCloseChat}
           onBackToFriends={onBackToFriends}
           onInitiateCall={onInitiateCall}
+          onInitiateGroupCall={onInitiateGroupCall}
           onViewProfile={onViewProfile}
+          canContactDm={canContactDm}
         />
+
+        {!room.isDM && groupCallState === 'idle' && activeCallRooms.has(room._id) && (
+          <div className="mx-4 mt-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-between gap-2 text-sm">
+            <span className="text-primary font-medium">Cuộc gọi nhóm đang diễn ra</span>
+            <button
+              type="button"
+              onClick={() => onInitiateGroupCall(room, roomMembers, 'video')}
+              className="btn btn-primary btn-xs"
+            >
+              Tham gia
+            </button>
+          </div>
+        )}
 
         {pinnedMessageId && (
           <button
@@ -269,9 +334,8 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
 
         <MessageList
           containerRef={containerRef}
-          onScroll={handleScroll}
+          onScroll={handleMessageScroll}
           hasMore={hasMore}
-          onLoadMore={loadMore}
           backgroundStyle={getChatBackgroundStyle(chatBackground, chatBackgroundImage)}
           messageTextColor={getChatMessageColor(chatMessageColor)}
           messages={messages}
@@ -299,13 +363,19 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
               + Tạo khảo sát
             </button>
           )}
-          <MessageInput
-            onSend={handleSend}
-            onTyping={handleTyping}
-            replyTo={replyTo}
-            onCancelReply={() => setReplyTo(null)}
-            roomId={room._id}
-          />
+          {canContactDm ? (
+            <MessageInput
+              onSend={handleSend}
+              onTyping={handleTyping}
+              replyTo={replyTo}
+              onCancelReply={() => setReplyTo(null)}
+              roomId={room._id}
+            />
+          ) : (
+            <p className="border-t border-base-300 p-3 text-center text-sm text-base-content/60">
+              {currentDmAccess?.blockedByMe ? 'Bạn đã chặn người này.' : 'Cần kết bạn để nhắn tin trực tiếp.'}
+            </p>
+          )}
         </div>
       </div>
 
@@ -328,6 +398,7 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
           <RoomDrawer
             room={room}
             dmPartner={dmPartner}
+            blockedByMe={currentDmAccess?.blockedByMe}
             displayName={displayName}
             dmPartnerOnline={dmPartnerOnline}
             roomAvatar={roomAvatar}
@@ -356,6 +427,13 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
             onClose={() => setShowMembers(false)}
             setConfirmAction={setConfirmAction}
             onLeaveClick={handleLeaveButtonClick}
+            messages={messages}
+            hasMore={hasMore}
+            loadMore={loadMore}
+            onSelectMessage={(msgId) => {
+              const element = document.getElementById(`msg-${msgId}`);
+              element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
           />
         </>
       )}

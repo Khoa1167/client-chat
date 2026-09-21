@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Cancel01Icon } from '@hugeicons/core-free-icons';
 import Button from '../common/Button';
 import Modal from '../common/Modal';
 import OtpInput from '../common/OtpInput';
@@ -46,7 +48,7 @@ export default function TotpSettings() {
     setMfaStatus(status);
   };
 
-  useEffect(() => { reloadPasskeys().catch(() => {}); }, []);
+  useEffect(() => { Promise.resolve().then(reloadPasskeys).catch(() => {}); }, []);
 
   const close = () => {
     setAction('');
@@ -198,7 +200,7 @@ export default function TotpSettings() {
         <Modal onClose={step === 'recovery-codes' ? undefined : close} boxClassName="max-w-md w-full bg-base-100 border border-base-300 shadow-2xl">
           <div className="flex items-center justify-between gap-3 mb-4">
             <h3 className="font-bold">{ACTION_LABELS[action]}</h3>
-            {step !== 'recovery-codes' && <Button size="sm" circle onClick={close}>✕</Button>}
+            {step !== 'recovery-codes' && <Button size="sm" circle onClick={close} aria-label="Đóng"><HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={1.8} /></Button>}
           </div>
           <Toast message={error} type="error" variant="banner" alertClassName="py-2 px-3 text-xs rounded-lg mb-3" />
 

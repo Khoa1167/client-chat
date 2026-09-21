@@ -23,9 +23,8 @@ export default function useRoomManagement(room, user, { emit, on, isConnected },
   const [dmPartnerOnline, setDmPartnerOnline] = useState(
     () => getDMPartner(room, user)?.isOnline ?? null
   );
-  // Epoch Sender Key hiện hành của phòng nhóm — khởi tạo từ prop, cập nhật realtime qua
-  // 'sender_key:rotated' hoặc khi chính mình bấm "Xoay khóa" (room prop là snapshot, không tự đổi)
-  const [currentEpoch, setCurrentEpoch] = useState(room?.senderKeyEpoch || 0);
+  const [rotatedEpoch, setRotatedEpoch] = useState(null);
+  const currentEpoch = rotatedEpoch !== null ? rotatedEpoch : (room?.senderKeyEpoch ?? 0);
   // Danh sách thành viên/admin/chủ phòng — khởi tạo từ prop, cập nhật realtime qua
   // 'room:member_left'/'room:updated' (room prop là snapshot, không tự đổi khi người khác
   // rời/bị kick/được phong admin trong lúc mình đang mở đúng phòng này)
@@ -80,25 +79,21 @@ export default function useRoomManagement(room, user, { emit, on, isConnected },
 
     // Có người bấm "Xoay khóa nhóm" — cập nhật epoch hiện hành để lần gửi tiếp theo dùng khóa mới
     const offSenderKeyRotated = on('sender_key:rotated', ({ roomId: rId, epoch }) => {
-      if (rId?.toString() === room._id?.toString()) setCurrentEpoch(epoch);
+      if (rId?.toString() === room._id?.toString()) setRotatedEpoch(epoch);
     });
 
     // Thành viên trong nhóm thêm/xoay/gỡ thiết bị
     const offKeyChanged = on('key:changed', async ({ userId: changedUserId }) => {
-      if (room.isDM) return;
       if (!roomMembers?.some(m => m._id?.toString() === changedUserId?.toString())) return;
       const allDevicePublicKeys = await fetchRoomDevicePublicKeys(room);
       await redistributeSenderKey(room._id, currentEpoch, allDevicePublicKeys);
     });
 
-    // Có thành viên mới vào phòng (join phòng công khai) — phân phối Sender Key hiện hành cho họ
-    const offMemberJoined = on('room:member_joined', async ({ roomId: rId, member }) => {
-      if (rId?.toString() !== room._id?.toString()) return;
-      setRoomMembers(prev => prev.some(m => m._id === member._id) ? prev : [...prev, member]);
-      if (room.isDM) return;
-      const allDevicePublicKeys = await fetchRoomDevicePublicKeys({ members: [...roomMembers, member] });
-      await redistributeSenderKey(room._id, currentEpoch, allDevicePublicKeys);
-    });
+      // Server đã xoay epoch trước event này; không phân phối Sender Key cũ cho thành viên mới.
+      const offMemberJoined = on('room:member_joined', ({ roomId: rId, member }) => {
+        if (rId?.toString() !== room._id?.toString()) return;
+        setRoomMembers(prev => prev.some(m => m._id === member._id) ? prev : [...prev, member]);
+      });
 
     // Có thành viên rời/bị kick — cập nhật danh sách thành viên đang hiển thị
     const offMemberLeft = on('room:member_left', ({ roomId: rId, userId: leftUserId }) => {
@@ -170,7 +165,7 @@ export default function useRoomManagement(room, user, { emit, on, isConnected },
   const handleRotateKey = async () => {
     try {
       const data = await rotateSenderKey(room._id);
-      setCurrentEpoch(data.epoch);
+      setRotatedEpoch(data.epoch);
     } catch (err) {
       console.error('[E2EE] Rotate key error:', err);
       toast.error('Không thể xoay khóa nhóm');
@@ -200,8 +195,8 @@ export default function useRoomManagement(room, user, { emit, on, isConnected },
   const isOwner = !room?.isDM && ownerId === user._id?.toString();
   const isAdmin = !room?.isDM && (isOwner || admins.includes(user._id?.toString()));
   const userPermissions = grantedPermissions[user._id?.toString()] || [];
-  const hasPinPermission = isOwner || (!isAdmin
-    && (userPermissions.includes('pin_messages') || userPermissions.includes('pin')));
+  // DM không có host/admin nhưng cả 2 phía đều được ghim tin nhắn (khớp hasRoomPermission server).
+  const hasPinPermission = room?.isDM || isAdmin || userPermissions.includes('pin_messages') || userPermissions.includes('pin');
   const hasPollPermission = isOwner || isAdmin || userPermissions.includes('create_polls');
 
   const handlePinMessage = (messageId) => {

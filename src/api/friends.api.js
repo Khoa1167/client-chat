@@ -32,3 +32,12 @@ export const getUserProfile = (userId) =>
 
 export const setFriendAlias = (userId, alias) =>
   api.put(`/friends/alias/${userId}`, { alias }).then(res => res.data);
+
+export const getBlockedUsers = (page = 1) =>
+  api.get('/friends/blocked', { params: { page } }).then(res => res.data);
+
+export const blockUser = (userId) =>
+  api.post(`/friends/block/${userId}`).then(res => res.data);
+
+export const unblockUser = (userId) =>
+  api.delete(`/friends/block/${userId}`).then(res => res.data);

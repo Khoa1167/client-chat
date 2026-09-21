@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { AlertCircleIcon, ArrowRight01Icon, Cancel01Icon, UserStatusIcon } from '@hugeicons/core-free-icons';
 import { ShieldCheck, ChevronRight, QrCode } from '../icons';
 import { toast } from '../common/toastStore';
 import Modal from '../common/Modal';
 import ConfirmModal from '../common/ConfirmModal';
 import Button from '../common/Button';
+import BlockUserButton from '../common/BlockUserButton';
 import Spinner from '../common/Spinner';
 import ShareProfileModal from './ShareProfileModal';
 import {
@@ -31,25 +34,11 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
-  const { on, emit } = useSocket();
+  const { on } = useSocket();
 
   const [alias, setAlias] = useState('');
   const [isEditingAlias, setIsEditingAlias] = useState(false);
   const [aliasLoading, setAliasLoading] = useState(false);
-
-  const fetchProfile = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      const data = await getUserProfile(userId);
-      setProfile(data);
-      setAlias(data.customAlias || '');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Không thể tải thông tin người dùng');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSaveAlias = async () => {
     setAliasLoading(true);
@@ -65,9 +54,20 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
   };
 
   useEffect(() => {
-    if (userId) {
-      fetchProfile();
-    }
+    if (!userId) return;
+    let active = true;
+    getUserProfile(userId)
+      .then(data => {
+        if (!active) return;
+        setProfile(data);
+        setAlias(data.customAlias || '');
+        setError('');
+      })
+      .catch(err => {
+        if (active) setError(err.response?.data?.message || 'Không thể tải thông tin người dùng');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [userId]);
 
   useEffect(() => {
@@ -95,14 +95,24 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
     };
   }, [profile?.user?._id, on]);
 
+  useEffect(() => {
+    const syncBlock = (event) => {
+      if (event.detail.userId === userId) {
+        setProfile(prev => prev && ({ ...prev, blockedByMe: event.detail.blocked,
+          friendshipStatus: event.detail.blocked ? 'none' : prev.friendshipStatus,
+          friendshipId: event.detail.blocked ? null : prev.friendshipId }));
+      }
+    };
+    window.addEventListener('user:block_changed', syncBlock);
+    return () => window.removeEventListener('user:block_changed', syncBlock);
+  }, [userId]);
+
   // ── Xử lý các nút hành động ──
 
   const handleSendRequest = async () => {
     setActionLoading(true);
     try {
-      const data = await sendFriendRequest(userId);
-      // Báo realtime cho người nhận, giống FriendList.jsx — không thì họ chỉ thấy sau khi F5.
-      emit('friend:request', { receiverId: userId, friendship: data });
+      await sendFriendRequest(userId);
       setProfile(prev => ({ ...prev, friendshipStatus: 'pending_sent' }));
       toast.success('Đã gửi lời mời kết bạn');
     } catch (err) {
@@ -192,8 +202,8 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
     <Modal onClose={onClose} boxClassName="p-0 max-w-md bg-base-100 border border-base-300 shadow-2xl">
         <div className="p-4 border-b border-base-300 flex items-center justify-between bg-base-200/50">
           <h2 className="text-base font-bold">Trang cá nhân</h2>
-          <Button size="sm" pill className="bg-base-200" onClick={onClose}>
-            ✕ Đóng
+          <Button size="sm" pill className="bg-base-200 gap-1" onClick={onClose}>
+            <HugeiconsIcon icon={Cancel01Icon} size={14} strokeWidth={1.8} />Đóng
           </Button>
         </div>
 
@@ -204,8 +214,8 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
               <span className="text-sm font-medium">Đang tải thông tin...</span>
             </div>
           ) : error ? (
-            <div className="py-8 text-center text-error text-sm font-semibold">
-              ⚠️ {error}
+            <div className="py-8 text-center text-error text-sm font-semibold flex items-center justify-center gap-1">
+              <HugeiconsIcon icon={AlertCircleIcon} size={16} strokeWidth={1.8} />{error}
             </div>
           ) : profile ? (
             <>
@@ -253,7 +263,7 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
                         onClick={() => { setIsEditingAlias(false); setAlias(profile.customAlias || ''); }}
                         size="sm" className="bg-base-200"
                       >
-                        ✕
+                        <HugeiconsIcon icon={Cancel01Icon} size={14} strokeWidth={1.8} />
                       </Button>
                     </div>
                   ) : (
@@ -295,7 +305,7 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
                       <span className="text-base-content/40 italic">{privateFieldFallback}</span>
                     ) : profile.user.isOnline ? (
                       <span className="text-success flex items-center justify-center gap-1">
-                        ● Đang hoạt động
+                        <HugeiconsIcon icon={UserStatusIcon} size={14} strokeWidth={1.8} />Đang hoạt động
                       </span>
                     ) : (
                       <span className="text-base-content/40">
@@ -309,14 +319,14 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
               </div>
 
               {/* Action Buttons Bar */}
-              <div className="flex items-center justify-center gap-2 pt-2 border-t border-base-300">
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2 border-t border-base-300">
                 {profile.friendshipStatus === 'self' && (
                   <div className="text-xs text-base-content/40 bg-base-200 px-4 py-2 rounded-xl font-medium w-full text-center">
                     Đây là trang cá nhân của bạn
                   </div>
                 )}
 
-                {profile.friendshipStatus === 'accepted' && (
+                {!profile.blockedByMe && profile.friendshipStatus === 'accepted' && (
                   <>
                     <Button
                       onClick={handleOpenDM}
@@ -366,7 +376,7 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
                   </>
                 )}
 
-                {profile.friendshipStatus === 'none' && (
+                {!profile.blockedByMe && profile.friendshipStatus === 'none' && (
                   <>
                     <Button
                       onClick={handleSendRequest}
@@ -393,7 +403,7 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
                   </>
                 )}
 
-                {profile.friendshipStatus === 'pending_sent' && (
+                {!profile.blockedByMe && profile.friendshipStatus === 'pending_sent' && (
                   <button
                     onClick={handleCancelRequest}
                     disabled={actionLoading}
@@ -407,7 +417,7 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
                   </button>
                 )}
 
-                {profile.friendshipStatus === 'pending_received' && (
+                {!profile.blockedByMe && profile.friendshipStatus === 'pending_received' && (
                   <>
                     <Button
                       onClick={handleAcceptRequest}
@@ -433,6 +443,10 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
                   </>
                 )}
               </div>
+              {profile.friendshipStatus !== 'self' && (
+                <BlockUserButton userId={userId} displayName={profile.user.nickname}
+                  blocked={profile.blockedByMe} className="w-full" />
+              )}
 
               <div className="bg-base-200/80 border border-base-300 rounded-xl p-4 flex flex-col gap-3">
                 <h4 className="text-xs font-bold text-base-content/40 uppercase tracking-wider">Thông tin cá nhân</h4>
@@ -569,7 +583,7 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
                               {room.members?.length || 0} thành viên
                             </p>
                           </div>
-                          <span className="text-xs text-base-content/30 group-hover:text-primary transition-colors">➔</span>
+                          <HugeiconsIcon icon={ArrowRight01Icon} size={14} strokeWidth={1.8} className="text-base-content/30 group-hover:text-primary transition-colors" />
                         </a>
                       </li>
                     ))}

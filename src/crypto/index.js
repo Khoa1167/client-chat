@@ -5,5 +5,5 @@ export * from './sessionKey';
 export * from './senderKey';
 export * from './attachmentCrypto';
 export * from './safetyNumber';
-export * from './keyBackup';
-export * from './historyBackup';
+export * from './messageCache';
+export * from './deviceLink';

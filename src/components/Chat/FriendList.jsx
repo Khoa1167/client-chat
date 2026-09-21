@@ -20,7 +20,7 @@ import { getMyPendingInvites, acceptRoomInvite, declineRoomInvite } from '../../
 
 export default function FriendList({ onSelectDM, onViewProfile }) {
   const { user } = useAuth();
-  const { on, emit }            = useSocket();
+  const { on }                  = useSocket();
   const [friends, setFriends]   = useState([]);
   const [requests, setRequests] = useState([]);
   const [groupInvites, setGroupInvites] = useState([]);
@@ -110,7 +110,7 @@ export default function FriendList({ onSelectDM, onViewProfile }) {
       }
     }, 400);
     return () => clearTimeout(timeout);
-  }, [searchQ]);
+  }, [searchQ, showActionError]);
 
   const handleSearch = (e) => setSearchQ(e.target.value);
   // Query quá ngắn thì ẩn kết quả cũ còn sót lại.
@@ -119,9 +119,7 @@ export default function FriendList({ onSelectDM, onViewProfile }) {
   const sendRequest = async (userId) => {
     showActionError('');
     try {
-      const data = await sendFriendRequest(userId);
-      // Gửi kèm toàn bộ friendship object để receiver có đủ thông tin
-      emit('friend:request', { receiverId: userId, friendship: data });
+      await sendFriendRequest(userId);
       setSearchResults(prev =>
         prev.map(u => u._id === userId ? { ...u, requested: true } : u)
       );

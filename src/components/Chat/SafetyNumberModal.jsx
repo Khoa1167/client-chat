@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Cancel01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
-import { computeFingerprint } from '../../crypto';
+import { computeFingerprint, getDeviceId } from '../../crypto';
 import { getUserDevices } from '../../api/users.api';
 import { safeGet, safeSet } from '../../utils/safeStorage';
 
@@ -14,7 +16,9 @@ export default function SafetyNumberModal({ user, contactUser, onClose, zIndex }
 
   useEffect(() => {
     const calcFingerprints = async () => {
-      const myActiveDevice = user.devices?.find(d => !d.isRevoked);
+      const currentDeviceId = getDeviceId();
+      const myActiveDevice = user.devices?.find(d => d.deviceId === currentDeviceId && !d.isRevoked)
+        || user.devices?.find(d => !d.isRevoked);
       if (myActiveDevice) {
         const fp = await computeFingerprint(myActiveDevice.publicKey);
         setMyFingerprint(fp);
@@ -22,11 +26,11 @@ export default function SafetyNumberModal({ user, contactUser, onClose, zIndex }
         setMyFingerprint('Chưa đăng ký thiết bị');
       }
 
-      // room/members populate không trả devices (tránh lộ metadata) — phải gọi riêng endpoint đã lọc sẵn.
       try {
         const contactDevices = await getUserDevices(contactUser._id);
         if (contactDevices && contactDevices.length > 0) {
-          const fp = await computeFingerprint(contactDevices[0].publicKey);
+          const latestDevice = contactDevices.sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt))[0];
+          const fp = await computeFingerprint(latestDevice.publicKey);
           setContactFingerprint(fp);
         } else {
           setContactFingerprint('Chưa đăng ký thiết bị');
@@ -52,8 +56,8 @@ export default function SafetyNumberModal({ user, contactUser, onClose, zIndex }
           <h3 className="text-base font-bold flex items-center gap-1.5">
             🔐 Mã An Toàn (Safety Number)
           </h3>
-          <Button onClick={onClose} size="sm" circle>
-            ✕
+          <Button onClick={onClose} size="sm" circle aria-label="Đóng">
+            <HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={1.8} />
           </Button>
         </div>
 
@@ -83,7 +87,7 @@ export default function SafetyNumberModal({ user, contactUser, onClose, zIndex }
             variant={isVerified ? 'success' : 'ghost'}
             size="sm" pill className={isVerified ? '' : 'bg-base-200'}
           >
-            {isVerified ? '✓ Đã xác minh an toàn' : 'Đánh dấu đã xác minh'}
+            {isVerified ? <span className="inline-flex items-center gap-1"><HugeiconsIcon icon={CheckmarkCircle02Icon} size={16} strokeWidth={1.8} />Đã xác minh an toàn</span> : 'Đánh dấu đã xác minh'}
           </Button>
 
           <Button onClick={onClose} size="sm" pill className="bg-base-200">

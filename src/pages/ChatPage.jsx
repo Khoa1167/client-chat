@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { MessageCircleIcon } from '@hugeicons/core-free-icons';
 import { useSearchParams, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { format } from 'date-fns';
 import { toast }  from '../components/common/toastStore';
@@ -8,12 +10,12 @@ import IconRail   from '../components/Chat/IconRail';
 import Sidebar    from '../components/Chat/Sidebar';
 import ChatWindow from '../components/Chat/ChatWindow';
 import FriendList from '../components/Chat/FriendList';
-import CallModal  from '../components/Chat/CallModal';
 import OtherUserProfileModal from '../components/Profile/OtherUserProfileModal';
 import ProfileModal from '../components/Profile/ProfileModal';
-import KeyBackupModal from '../components/Settings/KeyBackupModal';
 import { previewInvite, joinViaInvite } from '../api/rooms.api';
 import { useSocket } from '../hooks/useSocket';
+import { useCall } from '../context/CallContext';
+import { useGroupCall } from '../context/GroupCallContext';
 import { ChevronLeft } from '../components/icons';
 
 export default function ChatPage() {
@@ -32,250 +34,12 @@ export default function ChatPage() {
   const [invitePreview, setInvitePreview] = useState(null);
   const [inviteJoining, setInviteJoining] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [showKeyBackup, setShowKeyBackup] = useState(false);
 
-  // States cho tính năng cuộc gọi WebRTC
-  const { on, emit } = useSocket();
-  const [callState, setCallState] = useState('idle'); // 'idle' | 'ringing-out' | 'ringing-in' | 'active'
-  const [callType, setCallType] = useState('video');   // 'video' | 'audio'
-  const [callerInfo, setCallerInfo] = useState(null);
-  const [receiverInfo, setReceiverInfo] = useState(null);
-  const [localStream, setLocalStream] = useState(null);
-  const [remoteStream, setRemoteStream] = useState(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const { on } = useSocket();
+  const { startCall } = useCall();
+  const { joinGroupCall } = useGroupCall();
 
-  const pcRef = useRef(null);
-  const localStreamRef = useRef(null);
-  const targetUserIdRef = useRef(null);
-  // ICE candidate đến khi bên nhận còn đổ chuông (pcRef chưa tạo) — xếp hàng chờ, nạp lại khi PC tạo xong.
-  const pendingIceRef = useRef([]);
-
-  const configuration = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ]
-  };
-
-  const initiatePeerConnection = (targetId) => {
-    const pc = new RTCPeerConnection(configuration);
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        emit('call:ice-candidate', { targetId, candidate: event.candidate });
-      }
-    };
-
-    pc.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
-        setRemoteStream(event.streams[0]);
-      }
-    };
-
-    pcRef.current = pc;
-
-    if (pendingIceRef.current.length) {
-      pendingIceRef.current.forEach(candidate => {
-        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.error('Lỗi khi nạp ICE Candidate:', e));
-      });
-      pendingIceRef.current = [];
-    }
-
-    return pc;
-  };
-
-  // Khởi đầu cuộc gọi (Caller)
-  const handleStartCall = async (partner, type) => {
-    try {
-      setCallState('ringing-out');
-      setCallType(type);
-      setReceiverInfo(partner);
-      targetUserIdRef.current = partner._id;
-      setIsMuted(false);
-      setIsVideoOff(false);
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: type === 'video',
-        audio: true
-      });
-      setLocalStream(stream);
-      localStreamRef.current = stream;
-
-      const pc = initiatePeerConnection(partner._id);
-
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-      });
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      emit('call:request', {
-        receiverId: partner._id,
-        signalData: offer,
-        type
-      });
-
-    } catch (err) {
-      console.error('Không thể bắt đầu cuộc gọi:', err);
-      toast.error('Không thể truy cập camera hoặc microphone.');
-      cleanupCall();
-    }
-  };
-
-  // Chấp nhận cuộc gọi (Receiver)
-  const handleAcceptCall = async () => {
-    if (!callerInfo) return;
-    try {
-      setCallState('active');
-      const partnerId = callerInfo._id;
-      targetUserIdRef.current = partnerId;
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: callType === 'video',
-        audio: true
-      });
-      setLocalStream(stream);
-      localStreamRef.current = stream;
-
-      const pc = initiatePeerConnection(partnerId);
-
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-      });
-
-      const offer = callerInfo.signalData;
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      emit('call:accept', {
-        callerId: partnerId,
-        signalData: answer
-      });
-
-    } catch (err) {
-      console.error('Không thể chấp nhận cuộc gọi:', err);
-      toast.error('Lỗi kết nối cuộc gọi.');
-      cleanupCall();
-    }
-  };
-
-  const handleDeclineCall = () => {
-    if (callerInfo) {
-      emit('call:reject', { callerId: callerInfo._id });
-    }
-    cleanupCall();
-  };
-
-  // Hủy cuộc gọi khi đang đổ chuông đi
-  const handleCancelCall = () => {
-    if (targetUserIdRef.current) {
-      emit('call:end', { targetId: targetUserIdRef.current });
-    }
-    cleanupCall();
-  };
-
-  // Gác máy khi đang gọi
-  const handleEndCall = () => {
-    if (targetUserIdRef.current) {
-      emit('call:end', { targetId: targetUserIdRef.current });
-    }
-    cleanupCall();
-  };
-
-  const cleanupCall = () => {
-    setCallState('idle');
-    setCallerInfo(null);
-    setReceiverInfo(null);
-    setRemoteStream(null);
-    setLocalStream(null);
-    setIsMuted(false);
-    setIsVideoOff(false);
-    setIsMinimized(false);
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-    }
-    if (pcRef.current) {
-      pcRef.current.close();
-      pcRef.current = null;
-    }
-    targetUserIdRef.current = null;
-    pendingIceRef.current = [];
-  };
-
-  const toggleMute = () => {
-    if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
-      }
-    }
-  };
-
-  const toggleCamera = () => {
-    if (localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsVideoOff(!videoTrack.enabled);
-      }
-    }
-  };
-
-  // Lắng nghe các sự kiện socket báo hiệu cuộc gọi
   useEffect(() => {
-    const offCallRequest = on('call:request', ({ caller, signalData, type }) => {
-      setCallState('ringing-in');
-      setCallType(type);
-      setCallerInfo({ ...caller, signalData });
-      targetUserIdRef.current = caller._id;
-    });
-
-    const offCallAccept = on('call:accept', async ({ signalData }) => {
-      if (pcRef.current) {
-        await pcRef.current.setRemoteDescription(new RTCSessionDescription(signalData));
-        setCallState('active');
-      }
-    });
-
-    const offCallReject = on('call:reject', () => {
-      toast.error('Người dùng bận hoặc đã từ chối cuộc gọi.');
-      cleanupCall();
-    });
-
-    const offCallIceCandidate = on('call:ice-candidate', async ({ candidate }) => {
-      if (pcRef.current) {
-        try {
-          await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (e) {
-          console.error('Lỗi khi nạp ICE Candidate:', e);
-        }
-      } else {
-        pendingIceRef.current.push(candidate);
-      }
-    });
-
-    const offCallEnd = on('call:end', () => {
-      cleanupCall();
-    });
-
-    const offCallFailed = on('call:failed', ({ reason }) => {
-      if (reason === 'offline') {
-        toast.error('Người dùng hiện đang ngoại tuyến.');
-      } else {
-        toast.error('Cuộc gọi thất bại.');
-      }
-      cleanupCall();
-    });
-
-    // Bị kick khỏi nhóm / chủ phòng hủy phòng / vừa tự rời nhóm — đóng khung chat nếu đang mở đúng
-    // phòng đó. 'left' không toast — tự mình vừa chủ động bấm rời, đã có xác nhận riêng lúc đó rồi.
     const offRoomRemoved = on('room:removed', ({ roomId, reason }) => {
       setActiveRoom(prev => {
         if (prev?._id === roomId) {
@@ -287,16 +51,7 @@ export default function ChatPage() {
         return prev;
       });
     });
-
-    return () => {
-      offCallRequest();
-      offCallAccept();
-      offCallReject();
-      offCallIceCandidate();
-      offCallEnd();
-      offCallFailed();
-      offRoomRemoved();
-    };
+    return offRoomRemoved;
   }, [on]);
 
   // Chọn phòng để chat — đẩy thêm 1 entry lịch sử "đang mở phòng X", để nút back/vuốt lùi mobile
@@ -357,14 +112,13 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-base-100 text-base-content font-sans select-none relative">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-base-100 text-base-content font-sans select-none relative">
       {/* Cột 0: Thanh icon điều hướng toàn app */}
       <IconRail
         view={view}
         onSelectChat={() => setView('chat')}
         onSelectFriends={() => setView('friends')}
         onOpenProfile={() => setShowProfile(true)}
-        onOpenKeyBackup={() => setShowKeyBackup(true)}
       />
 
       {/* Sidebar: 2 lớp div — lớp ngoài co giãn width (giống drawer daisyUI), lớp trong giữ width
@@ -400,7 +154,8 @@ export default function ChatPage() {
             room={activeRoom}
             onCloseChat={() => navigate(-1)}
             onBackToFriends={() => { navigate(-1); setView('friends'); }}
-            onInitiateCall={handleStartCall}
+            onInitiateCall={startCall}
+            onInitiateGroupCall={joinGroupCall}
             onViewProfile={(userId) => setViewingUserId(userId)}
           />
         ) : (
@@ -412,7 +167,6 @@ export default function ChatPage() {
       </div>
 
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
-      {showKeyBackup && <KeyBackupModal onClose={() => setShowKeyBackup(false)} />}
 
       {invitePreview && (
         <Modal onClose={() => setInvitePreview(null)} boxClassName="max-w-sm bg-base-100 border border-base-300 shadow-2xl">
@@ -426,8 +180,8 @@ export default function ChatPage() {
                 </div>
               </div>
             ) : (
-              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-primary to-secondary text-primary-content flex items-center justify-center text-3xl ring-2 ring-primary/30">
-                💬
+              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-primary to-secondary text-primary-content flex items-center justify-center ring-2 ring-primary/30">
+                <HugeiconsIcon icon={MessageCircleIcon} size={32} strokeWidth={1.8} />
               </div>
             )}
             <p className="text-lg font-bold text-primary text-center">{invitePreview.name || 'Nhóm chat'}</p>
@@ -474,31 +228,12 @@ export default function ChatPage() {
         </Modal>
       )}
 
-      <CallModal
-        callState={callState}
-        callType={callType}
-        callerInfo={callerInfo}
-        receiverInfo={receiverInfo}
-        localStream={localStream}
-        remoteStream={remoteStream}
-        onAccept={handleAcceptCall}
-        onDecline={handleDeclineCall}
-        onCancel={handleCancelCall}
-        onEndCall={handleEndCall}
-        isMuted={isMuted}
-        isVideoOff={isVideoOff}
-        toggleMute={toggleMute}
-        toggleCamera={toggleCamera}
-        isMinimized={isMinimized}
-        setIsMinimized={setIsMinimized}
-      />
-
       {viewingUserId && (
         <OtherUserProfileModal
           userId={viewingUserId}
           onClose={() => setViewingUserId(null)}
           onSelectRoom={handleSelectRoom}
-          onInitiateCall={handleStartCall}
+          onInitiateCall={startCall}
         />
       )}
     </div>

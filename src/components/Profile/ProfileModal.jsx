@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Cancel01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons';
 import { format } from 'date-fns';
 import { QrCode } from '../icons';
 import Modal from '../common/Modal';
@@ -24,7 +26,7 @@ export default function ProfileModal({ onClose }) {
           >
             <QrCode className="w-4 h-4" /> Chia sẻ
           </Button>
-          <Button size="sm" pill className="bg-base-200" onClick={onClose}>✕ Đóng</Button>
+          <Button size="sm" pill className="bg-base-200 gap-1" onClick={onClose}><HugeiconsIcon icon={Cancel01Icon} size={14} strokeWidth={1.8} />Đóng</Button>
         </div>
       </div>
 
@@ -71,7 +73,7 @@ export default function ProfileModal({ onClose }) {
             <span className="text-base-content/50 font-medium">Email:</span>
             <span className="font-semibold flex items-center gap-1">
               {user.email || 'Chưa cập nhật'}
-              {user.email && <span className="badge badge-success badge-outline badge-xs">✓ Đã xác minh</span>}
+              {user.email && <span className="badge badge-success badge-outline badge-xs gap-1"><HugeiconsIcon icon={CheckmarkCircle02Icon} size={12} strokeWidth={1.8} />Đã xác minh</span>}
             </span>
           </div>
 

@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Cancel01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -7,8 +9,9 @@ import { DayPicker } from 'react-day-picker';
 import IconRail from '../components/Chat/IconRail';
 import Button from '../components/common/Button';
 import ProfileModal from '../components/Profile/ProfileModal';
-import KeyBackupModal from '../components/Settings/KeyBackupModal';
 import TotpSettings from '../components/Settings/TotpSettings';
+import DeviceLinkModal from '../components/Settings/DeviceLinkModal';
+import BackupRestoreSection from '../components/Settings/BackupRestoreSection';
 import Modal from '../components/common/Modal';
 import ConfirmModal from '../components/common/ConfirmModal';
 import Tabs from '../components/common/Tabs';
@@ -27,6 +30,7 @@ import { getDeviceId } from '../crypto';
 import { isOnDeviceEnabled, setOnDeviceEnabled } from '../utils/onDeviceTranscriber';
 import useTimedMessage from '../hooks/useTimedMessage';
 import useImageUpload from '../hooks/useImageUpload';
+import { getBlockedUsers, unblockUser } from '../api/friends.api';
 
 // Khớp default trong server/src/models/User.js, dùng khi user.privacySettings chưa có. Chỉ 2 mức:
 // 'friends' (bạn bè xem được) / 'private' (không ai xem được, kể cả bạn bè).
@@ -57,17 +61,71 @@ const SETTINGS_TABS = [
   { key: 'password', label: 'Đổi mật khẩu' },
   { key: 'security', label: 'Bảo mật' },
   { key: 'privacy', label: 'Riêng tư' },
+  { key: 'blocked', label: 'Đã chặn' },
   { key: 'devices', label: 'Quản lý thiết bị' },
   { key: 'login-history', label: 'Lịch sử đăng nhập' },
 ];
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState('info'); // 'info' | 'theme' | 'password' | 'privacy' | 'devices' | 'login-history'
+  const [tab, setTab] = useState('info');
   const [showProfile, setShowProfile] = useState(false);
-  const [showKeyBackup, setShowKeyBackup] = useState(false);
+  const [showDeviceLink, setShowDeviceLink] = useState(false);
   const { theme, changeTheme, availableThemes } = useTheme();
   const { user, setUser } = useAuth();
+  const [blockedUsers, setBlockedUsers] = useState(null);
+  const [blockedPage, setBlockedPage] = useState(0);
+  const [blockedHasMore, setBlockedHasMore] = useState(false);
+  const [blockedBusy, setBlockedBusy] = useState(false);
+  const [blockedError, setBlockedError] = useState('');
+  const [blockedReload, setBlockedReload] = useState(0);
+  const [unblockTarget, setUnblockTarget] = useState(null);
+
+  useEffect(() => {
+    if (tab !== 'blocked' || blockedUsers !== null) return;
+    let active = true;
+    getBlockedUsers().then(data => {
+      if (!active) return;
+      setBlockedUsers(data.users);
+      setBlockedPage(1);
+      setBlockedHasMore(data.hasMore);
+      setBlockedError('');
+    }).catch(err => {
+      if (active) setBlockedError(err.response?.data?.message || 'Không thể tải danh sách đã chặn');
+    });
+    return () => { active = false; };
+  }, [tab, blockedUsers, blockedReload]);
+
+  const loadMoreBlocked = async () => {
+    setBlockedBusy(true);
+    try {
+      const data = await getBlockedUsers(blockedPage + 1);
+      setBlockedUsers(prev => [...prev, ...data.users]);
+      setBlockedPage(prev => prev + 1);
+      setBlockedHasMore(data.hasMore);
+      setBlockedError('');
+    } catch (err) {
+      setBlockedError(err.response?.data?.message || 'Không thể tải thêm người dùng');
+    } finally {
+      setBlockedBusy(false);
+    }
+  };
+
+  const handleUnblock = async (userId) => {
+    setUnblockTarget(null);
+    setBlockedBusy(true);
+    try {
+      await unblockUser(userId);
+      setBlockedUsers(null);
+      setBlockedError('');
+      window.dispatchEvent(new CustomEvent('user:block_changed', { detail: { userId, blocked: false } }));
+      toast.success('Đã bỏ chặn');
+    } catch (err) {
+      setBlockedError(err.response?.data?.message || 'Không thể bỏ chặn');
+    } finally {
+      setBlockedBusy(false);
+    }
+  };
 
   // ── Tab Sửa thông tin cá nhân ── (chuyển từ ProfileModal.jsx — Profile giờ chỉ hiển thị)
   const fileInputRef = useRef(null);
@@ -298,12 +356,11 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-base-100 text-base-content">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-base-100 text-base-content">
       <IconRail
         onSelectChat={() => navigate('/')}
         onSelectFriends={() => navigate('/', { state: { view: 'friends' } })}
         onOpenProfile={() => setShowProfile(true)}
-        onOpenKeyBackup={() => setShowKeyBackup(true)}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -351,7 +408,7 @@ export default function SettingsPage() {
                         }}
                         title="Xóa ảnh bìa"
                       >
-                        ✕ Xóa ảnh bìa
+                        <HugeiconsIcon icon={Cancel01Icon} size={14} strokeWidth={1.8} /> Xóa ảnh bìa
                       </button>
                     )}
 
@@ -448,7 +505,7 @@ export default function SettingsPage() {
                         value={user.email || ''}
                       />
                       <span className="badge badge-success badge-outline shrink-0 gap-1">
-                        ✓ Đã xác minh
+                        <HugeiconsIcon icon={CheckmarkCircle02Icon} size={14} strokeWidth={1.8} /> Đã xác minh
                       </span>
                     </div>
                   </div>
@@ -604,7 +661,7 @@ export default function SettingsPage() {
                         onClick={() => setShowEmailModal(false)}
                         className="btn-sm btn-circle"
                       >
-                        ✕
+                        <HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={1.8} />
                       </Button>
                     </div>
 
@@ -772,6 +829,43 @@ export default function SettingsPage() {
 
             {tab === 'security' && <TotpSettings />}
 
+            {tab === 'blocked' && (
+              <div className="flex flex-col gap-3">
+                <p className="text-xs text-base-content/60">
+                  Người bị chặn không thể nhắn tin trực tiếp, gọi hoặc gửi lời mời kết bạn với bạn. Nhóm chung không bị ảnh hưởng.
+                </p>
+                {blockedUsers === null ? (
+                  <p className="text-sm text-base-content/50" role="status">{blockedError || 'Đang tải danh sách...'}</p>
+                ) : blockedUsers.length === 0 ? (
+                  <p className="text-sm text-base-content/50">Bạn chưa chặn ai.</p>
+                ) : blockedUsers.map(entry => (
+                  <div key={entry._id} className="flex items-center gap-3 p-3 rounded-lg border border-base-300 bg-base-100">
+                    <div className="avatar flex-shrink-0">
+                      <div className="w-10 rounded-full bg-primary text-primary-content font-bold">
+                        {entry.avatar ? <img src={entry.avatar} alt="" /> : <span className="w-full h-full flex items-center justify-center">{(entry.nickname || '?')[0].toUpperCase()}</span>}
+                      </div>
+                    </div>
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold">{entry.nickname}</span>
+                    <Button type="button" size="sm" className="bg-base-200 shrink-0"
+                      disabled={blockedBusy} onClick={() => setUnblockTarget(entry)}>
+                      Bỏ chặn
+                    </Button>
+                  </div>
+                ))}
+                {blockedHasMore && blockedUsers !== null && (
+                  <Button type="button" size="sm" className="self-center bg-base-200" disabled={blockedBusy} onClick={loadMoreBlocked}>
+                    Xem thêm
+                  </Button>
+                )}
+                {blockedUsers !== null && blockedError && <p role="alert" className="text-sm text-error">{blockedError}</p>}
+                {blockedUsers === null && blockedError && (
+                  <Button type="button" size="sm" className="self-start bg-base-200" onClick={() => { setBlockedError(''); setBlockedReload(prev => prev + 1); }}>
+                    Thử lại
+                  </Button>
+                )}
+              </div>
+            )}
+
             {/* Riêng tư */}
             {tab === 'privacy' && (
               <form onSubmit={handleSavePrivacy} className="flex flex-col gap-3">
@@ -838,6 +932,7 @@ export default function SettingsPage() {
                     }}
                   />
                 </label>
+                <BackupRestoreSection />
               </div>
             )}
 
@@ -878,6 +973,10 @@ export default function SettingsPage() {
                     </div>
                   );
                 })}
+
+                <Button type="button" onClick={() => setShowDeviceLink(true)} variant="primary" className="btn-sm rounded-full self-start">
+                  Liên kết thiết bị mới
+                </Button>
 
                 <Toast message={devicesError} type="error" variant="banner" alertClassName="py-2 px-3 text-xs font-semibold rounded-lg" />
               </div>
@@ -950,8 +1049,16 @@ export default function SettingsPage() {
         </Modal>
       )}
 
+      {unblockTarget && (
+        <ConfirmModal title={`Bỏ chặn ${unblockTarget.nickname}?`}
+          description="Bỏ chặn không tự động kết bạn lại."
+          confirmLabel="Bỏ chặn" danger={false}
+          onConfirm={() => handleUnblock(unblockTarget._id)}
+          onCancel={() => setUnblockTarget(null)} />
+      )}
+
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
-      {showKeyBackup && <KeyBackupModal onClose={() => setShowKeyBackup(false)} />}
+      {showDeviceLink && <DeviceLinkModal user={user} onClose={() => setShowDeviceLink(false)} />}
     </div>
   );
 }
