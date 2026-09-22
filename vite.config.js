@@ -1,7 +1,20 @@
 import process from 'node:process'
+import fs from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+
+// Load wrangler.jsonc để lấy biến (nếu Cloudflare build không tự động set environment)
+let wranglerConfig = {}
+try {
+  const wranglerContent = fs.readFileSync('./wrangler.jsonc', 'utf-8')
+    .split('\n')
+    .filter(line => !line.trim().startsWith('//'))
+    .join('\n')
+  wranglerConfig = JSON.parse(wranglerContent)
+} catch {
+  // Ignore nếu không đọc được (vẫn sử dụng environment vars)
+}
 
 // Proxy /api và /socket.io sang backend — bắt buộc để cookie httpOnly hoạt động (SameSite=Lax
 // không tự gửi cookie cross-origin). Không dùng cho production thật (Cloudflare Workers,
@@ -19,6 +32,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  define: {
+    // Inject CAPTCHA site key từ environment hoặc wrangler.jsonc, đảm bảo nó được nhúng trong build
+    'import.meta.env.VITE_CLOUDFLARE_TURNSTILE_SITE_KEY': JSON.stringify(
+      process.env.VITE_CLOUDFLARE_TURNSTILE_SITE_KEY || wranglerConfig.vars?.VITE_CLOUDFLARE_TURNSTILE_SITE_KEY || ''
+    ),
+  },
   server: { proxy },
   preview: { proxy },
   build: {
