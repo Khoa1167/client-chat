@@ -80,8 +80,8 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
   // (canContactDm phía dưới) nên không cần lọc thêm ở đây.
   const blockedIds = useBlockedUserIds();
   const visibleMessages = useMemo(
-    () => room.isDM ? messages : messages.filter(m => !blockedIds.has(m.sender?._id?.toString())),
-    [messages, blockedIds, room.isDM]
+    () => room?.isDM ? messages : messages.filter(m => !blockedIds.has(m.sender?._id?.toString())),
+    [messages, blockedIds, room?.isDM]
   );
 
   const handleMessageScroll = useCallback(() => {
