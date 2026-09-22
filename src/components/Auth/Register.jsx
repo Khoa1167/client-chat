@@ -1,20 +1,17 @@
 import { useState, useEffect } from 'react';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { Loading03Icon } from '@hugeicons/core-free-icons';
 import { Link, useNavigate } from 'react-router-dom';
-import { checkUsername, sendOtp, verifyOtp } from '../../api/auth.api';
+import { sendOtp, verifyOtp } from '../../api/auth.api';
 import Turnstile from '../common/Turnstile';
 import Button from '../common/Button';
 import Toast from '../common/Toast';
 import PasswordInput from '../common/PasswordInput';
-import FieldHint from '../common/FieldHint';
 import OtpInput from '../common/OtpInput';
 import Spinner from '../common/Spinner';
 import useTimedMessage from '../../hooks/useTimedMessage';
-import useAvailabilityCheck from '../../hooks/useAvailabilityCheck';
 
 const turnstileEnabled = !!import.meta.env.VITE_CLOUDFLARE_TURNSTILE_SITE_KEY;
 const MAX_PASSWORD_LENGTH = 30;
+const USERNAME_REGEX = /^[a-zA-Z0-9]{3,16}$/;
 
 export default function Register() {
   const [step, setStep] = useState(1); // 1: form đăng ký, 2: nhập OTP
@@ -27,12 +24,6 @@ export default function Register() {
   // Chỉ bật cảnh báo CAPTCHA sau khi user bấm nút mà chưa xác thực, không hiện sẵn ngay khi vào trang.
   const [captchaWarning, setCaptchaWarning] = useState(false);
   const [otp, setOtp]               = useState('');
-  const usernameStatus = useAvailabilityCheck(form.username, {
-    checkFn: async (username) => (await checkUsername(username)).available,
-    // Khớp usernameRegex server — phân biệt 'invalid' với 'taken' (server trả available:false cho cả 2).
-    validate: (v) => /^[a-zA-Z0-9]{3,16}$/.test(v),
-    minLength: 3,
-  });
   const [error, showError]          = useTimedMessage();
   // Lỗi gắn theo ô cụ thể (username/email trùng, kể cả race condition) — khác `error` (banner chung).
   const [fieldErrors, setFieldErrors] = useState({ username: '', email: '' });
@@ -68,8 +59,8 @@ export default function Register() {
     if (form.password !== form.confirmPassword) {
       showError('Mật khẩu xác nhận không khớp'); return;
     }
-    if (usernameStatus !== 'available') {
-      showError('Vui lòng kiểm tra tên tài khoản'); return;
+    if (!USERNAME_REGEX.test(form.username)) {
+      showError('Tài khoản chỉ được chứa chữ cái và số, không kí tự đặc biệt, độ dài 3-16 kí tự'); return;
     }
     if (turnstileEnabled && !turnstileToken) {
       setCaptchaWarning(true); return;
@@ -160,16 +151,6 @@ export default function Register() {
     }
   };
 
-  const getUsernameMsg = () => {
-    // Lỗi conflict từ server ưu tiên hiện trước, chỉ mất khi user sửa lại ô này (xem onChange).
-    if (fieldErrors.username) return <span className="text-xs text-error flex items-center gap-1 mt-1">{fieldErrors.username}</span>;
-    if (usernameStatus === 'checking') return <span className="text-xs text-info flex items-center gap-1 mt-1"><HugeiconsIcon icon={Loading03Icon} size={14} strokeWidth={1.8} className="animate-spin" />Đang kiểm tra...</span>;
-    if (usernameStatus === 'available') return <span className="text-xs text-success flex items-center gap-1 mt-1">Tên tài khoản có thể dùng</span>;
-    if (usernameStatus === 'taken')    return <span className="text-xs text-error flex items-center gap-1 mt-1">Tên tài khoản đã tồn tại</span>;
-    if (usernameStatus === 'invalid')  return <span className="text-xs text-error flex items-center gap-1 mt-1">Tài khoản chỉ được chứa chữ cái và số, không kí tự đặc biệt, độ dài 3-16 kí tự</span>;
-    return null;
-  };
-
   // ── Giao diện bước 1: Form đăng ký ──
   if (step === 1) {
     return (
@@ -190,19 +171,19 @@ export default function Register() {
                 <label className="label">
                   <span className="label-text font-semibold text-base-content/80">Tên tài khoản</span>
                 </label>
-                <FieldHint hint="Chữ cái và số, không kí tự đặc biệt, 3-16 ký tự">
-                  <input
-                    className="input input-bordered focus:input-primary w-full transition-all duration-200"
-                    placeholder="Nhập tên tài khoản (3 - 16 ký tự)..."
-                    value={form.username}
-                    onChange={e => {
-                      setForm({ ...form, username: e.target.value });
-                      if (fieldErrors.username) setFieldErrors(prev => ({ ...prev, username: '' }));
-                    }}
-                    required minLength={3} maxLength={16}
-                  />
-                </FieldHint>
-                <div className="min-h-[20px]">{getUsernameMsg()}</div>
+                <input
+                  className="input input-bordered focus:input-primary w-full transition-all duration-200"
+                  placeholder="Nhập tên tài khoản (3 - 16 ký tự)..."
+                  value={form.username}
+                  onChange={e => {
+                    setForm({ ...form, username: e.target.value });
+                    if (fieldErrors.username) setFieldErrors(prev => ({ ...prev, username: '' }));
+                  }}
+                  required minLength={3} maxLength={16}
+                />
+                {fieldErrors.username && (
+                  <span className="text-xs text-error flex items-center gap-1 mt-1">{fieldErrors.username}</span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -210,20 +191,18 @@ export default function Register() {
                   <label className="label">
                     <span className="label-text font-semibold text-base-content/80">Mật khẩu</span>
                   </label>
-                  <FieldHint hint={`Mật khẩu dài 8-${MAX_PASSWORD_LENGTH} ký tự`}>
-                    <PasswordInput
-                      className="input input-bordered focus:input-primary w-full transition-all duration-200"
-                      placeholder={`8-${MAX_PASSWORD_LENGTH} ký tự...`}
-                      value={form.password}
-                      onChange={e => setForm({ ...form, password: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && form.password.length >= MAX_PASSWORD_LENGTH) {
-                          showError(`Mật khẩu không được vượt quá ${MAX_PASSWORD_LENGTH} ký tự`);
-                        }
-                      }}
-                      required minLength={8} maxLength={MAX_PASSWORD_LENGTH}
-                    />
-                  </FieldHint>
+                  <PasswordInput
+                    className="input input-bordered focus:input-primary w-full transition-all duration-200"
+                    placeholder={`8-${MAX_PASSWORD_LENGTH} ký tự...`}
+                    value={form.password}
+                    onChange={e => setForm({ ...form, password: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && form.password.length >= MAX_PASSWORD_LENGTH) {
+                        showError(`Mật khẩu không được vượt quá ${MAX_PASSWORD_LENGTH} ký tự`);
+                      }
+                    }}
+                    required minLength={8} maxLength={MAX_PASSWORD_LENGTH}
+                  />
                 </div>
 
                 <div className="form-control">
@@ -244,19 +223,17 @@ export default function Register() {
                 <label className="label">
                   <span className="label-text font-semibold text-base-content/80">Email</span>
                 </label>
-                <FieldHint hint="Định dạng email hợp lệ, vd: ten@example.com">
-                  <input
-                    type="email"
-                    className="input input-bordered focus:input-primary w-full transition-all duration-200"
-                    placeholder="name@example.com"
-                    value={form.email}
-                    onChange={e => {
-                      setForm({ ...form, email: e.target.value });
-                      if (fieldErrors.email) setFieldErrors(prev => ({ ...prev, email: '' }));
-                    }}
-                    required
-                  />
-                </FieldHint>
+                <input
+                  type="email"
+                  className="input input-bordered focus:input-primary w-full transition-all duration-200"
+                  placeholder="name@example.com"
+                  value={form.email}
+                  onChange={e => {
+                    setForm({ ...form, email: e.target.value });
+                    if (fieldErrors.email) setFieldErrors(prev => ({ ...prev, email: '' }));
+                  }}
+                  required
+                />
                 {fieldErrors.email && (
                   <span className="text-xs text-error flex items-center gap-1 mt-1">{fieldErrors.email}</span>
                 )}
@@ -266,14 +243,12 @@ export default function Register() {
                 <label className="label">
                   <span className="label-text font-semibold text-base-content/80">Số điện thoại (tùy chọn)</span>
                 </label>
-                <FieldHint hint="7-15 chữ số, có thể có dấu + ở đầu">
-                  <input
-                    className="input input-bordered focus:input-primary w-full transition-all duration-200"
-                    placeholder="Nhập số điện thoại..."
-                    value={form.phone}
-                    onChange={e => setForm({ ...form, phone: e.target.value })}
-                  />
-                </FieldHint>
+                <input
+                  className="input input-bordered focus:input-primary w-full transition-all duration-200"
+                  placeholder="Nhập số điện thoại..."
+                  value={form.phone}
+                  onChange={e => setForm({ ...form, phone: e.target.value })}
+                />
               </div>
 
               <Turnstile key={turnstileResetKey} onVerify={(token) => { setTurnstileToken(token); setCaptchaWarning(false); }} />
@@ -284,7 +259,7 @@ export default function Register() {
               <button
                 type="submit"
                 className="btn btn-primary w-full mt-4 font-bold shadow-md shadow-primary/25 hover:shadow-lg transition-all duration-200"
-                disabled={loading || usernameStatus !== 'available'}
+                disabled={loading}
               >
                 {loading ? (
                   <>
