@@ -14,7 +14,8 @@
   "main": "./worker/proxy.js",
   // URL gốc backend Render — sửa ở đây (không sửa code) nếu sau này đổi domain/service Render.
   "vars": {
-    "BACKEND_ORIGIN": "https://dev-a-virtualyourself.onrender.com"
+    "BACKEND_ORIGIN": "https://dev-a-virtualyourself.onrender.com",
+    "VITE_CLOUDFLARE_TURNSTILE_SITE_KEY": "0x4AAAAAAEVLEJ5KEFp2kM9r"
   },
   // Rate limit ở edge Cloudflare — chặn burst request thô theo IP TRƯỚC khi tới Render, bổ sung
   // cho rate-limit chi tiết theo từng route đã có trong app (không thay thế). Hoạt động được trên
