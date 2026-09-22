@@ -98,9 +98,10 @@ export default function OtherUserProfileModal({ userId, onClose, onSelectRoom, o
   useEffect(() => {
     const syncBlock = (event) => {
       if (event.detail.userId === userId) {
+        // Block giờ chỉ hủy lời mời đang chờ — friendship đã accepted vẫn được giữ nguyên (xem friends.service.js blockUser).
         setProfile(prev => prev && ({ ...prev, blockedByMe: event.detail.blocked,
-          friendshipStatus: event.detail.blocked ? 'none' : prev.friendshipStatus,
-          friendshipId: event.detail.blocked ? null : prev.friendshipId }));
+          friendshipStatus: prev.friendshipStatus === 'accepted' ? 'accepted' : (event.detail.blocked ? 'none' : prev.friendshipStatus),
+          friendshipId: prev.friendshipStatus === 'accepted' ? prev.friendshipId : (event.detail.blocked ? null : prev.friendshipId) }));
       }
     };
     window.addEventListener('user:block_changed', syncBlock);

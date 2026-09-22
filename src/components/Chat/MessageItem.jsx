@@ -1,6 +1,6 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, memo, useMemo } from 'react';
 import { MoreVertical, Timer } from '../icons';
 import { toast } from '../common/toastStore';
 import Modal from '../common/Modal';
@@ -13,33 +13,14 @@ import { Capacitor } from '@capacitor/core';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { AlertCircleIcon, CryingIcon, Download01Icon, File01Icon, HappyIcon, InLoveIcon, LaughingIcon, ReplyIcon, SurpriseIcon } from '@hugeicons/core-free-icons';
 import ReportModal from './ReportModal';
+import LinkPreview from './LinkPreview';
+import useElementVisibility from '../../hooks/useElementVisibility';
+import { URL_REGEX } from '../../utils/mediaGalleryFilter';
 import { isOnDeviceEnabled, transcribeOnDevice } from '../../utils/onDeviceTranscriber';
 import {
   attachmentPointer, getDecryptedAttachmentBlob, saveDecryptedBlob, attachmentFileName,
 } from '../../utils/attachmentDecrypt';
 
-function useAttachmentVisibility() {
-  const ref = useRef(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const target = ref.current;
-    if (!target || !('IntersectionObserver' in window)) {
-      setVisible(true);
-      return undefined;
-    }
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setVisible(true);
-        observer.disconnect();
-      }
-    }, { rootMargin: '200px' });
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, []);
-
-  return [ref, visible];
-}
 
 // Tải ciphertext R2 qua URL ngắn hạn, giải mã và bỏ padding/nén hoàn toàn ở client.
 function useDecryptedBlob(message, shouldLoad) {
@@ -76,7 +57,7 @@ function useDecryptedBlob(message, shouldLoad) {
 }
 
 function EncryptedImage({ message, className, onClick }) {
-  const [attachmentRef, visible] = useAttachmentVisibility();
+  const [attachmentRef, visible] = useElementVisibility();
   const { blobUrl, failed } = useDecryptedBlob(message, visible);
 
   if (failed) {
@@ -99,7 +80,7 @@ function EncryptedImage({ message, className, onClick }) {
 }
 
 function EncryptedAudio({ message, className }) {
-  const [attachmentRef, visible] = useAttachmentVisibility();
+  const [attachmentRef, visible] = useElementVisibility();
   const { blobUrl, blob, failed } = useDecryptedBlob(message, visible);
   const [transcript, setTranscript] = useState(null);
   const [transcribing, setTranscribing] = useState(false);
@@ -257,6 +238,11 @@ function MessageItem({ message, onReact, onReply, isDM, seenAt, onForwardClick, 
   const isOwn = message.sender._id?.toString() === user._id?.toString();
   const senderName = message.sender.nickname || message.sender.username;
   const currentAttachment = attachmentPointer(message);
+
+  const firstLinkUrl = useMemo(
+    () => (message.type === 'text' && !message.isDeleted) ? message.content?.match(URL_REGEX)?.[0] : null,
+    [message.type, message.isDeleted, message.content],
+  );
 
   const [showActions, setShowActions] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -584,6 +570,8 @@ function MessageItem({ message, onReact, onReply, isDM, seenAt, onForwardClick, 
               )
             )}
           </div>
+
+          {firstLinkUrl && !isEditing && <LinkPreview url={firstLinkUrl} />}
 
           {message.expiresAt && (
             <div

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ForgotPasswordModal from './ForgotPasswordModal';
+import AccountRecoveryModal from './AccountRecoveryModal';
 import Turnstile from '../common/Turnstile';
 import Toast from '../common/Toast';
 import PasswordInput from '../common/PasswordInput';
@@ -17,6 +18,8 @@ export default function Login() {
   const [error, showError]            = useTimedMessage();
   const [loading, setLoading]         = useState(false);
   const [isForgotOpen, setIsForgotOpen] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [isRecoveryOpen, setIsRecoveryOpen] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState('');
   // Đổi sau mỗi lần submit để buộc Turnstile render lại — token chỉ dùng được 1 lần
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
@@ -50,6 +53,7 @@ export default function Login() {
       navigate(from ? `${from.pathname}${from.search}` : '/');
     } catch (err) {
       showError(err.response?.data?.message || 'Đăng nhập thất bại');
+      setShowRecovery(err.response?.data?.code === 'PENDING_DELETION');
     } finally {
       setLoading(false);
       setTurnstileToken('');
@@ -98,7 +102,16 @@ export default function Login() {
           </h1>
           
           <Toast message={error} type="error" variant="banner" alertClassName="shadow-sm py-3 mb-4 rounded-lg text-sm font-medium" />
-          
+          {showRecovery && (
+            <button
+              type="button"
+              onClick={() => setIsRecoveryOpen(true)}
+              className="text-xs text-primary hover:underline mb-4 -mt-2 self-start"
+            >
+              Khôi phục tài khoản
+            </button>
+          )}
+
           {mfaChallenge ? (
             <form onSubmit={handleMfaSubmit} className="flex flex-col gap-4">
               {mfaMethods.passkey && typeof window !== 'undefined' && window.PublicKeyCredential && (
@@ -213,6 +226,7 @@ export default function Login() {
         isOpen={isForgotOpen}
         onClose={() => setIsForgotOpen(false)}
       />
+      {isRecoveryOpen && <AccountRecoveryModal onClose={() => setIsRecoveryOpen(false)} />}
     </div>
   );
 }

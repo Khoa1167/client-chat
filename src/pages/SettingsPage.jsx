@@ -2,14 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Cancel01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { vi as viDayPicker } from 'react-day-picker/locale';
-import { DayPicker } from 'react-day-picker';
 import IconRail from '../components/Chat/IconRail';
 import Button from '../components/common/Button';
+import DatePicker from '../components/common/DatePicker';
 import ProfileModal from '../components/Profile/ProfileModal';
 import TotpSettings from '../components/Settings/TotpSettings';
+import DeleteAccountSection from '../components/Settings/DeleteAccountSection';
 import DeviceLinkModal from '../components/Settings/DeviceLinkModal';
 import BackupRestoreSection from '../components/Settings/BackupRestoreSection';
 import Modal from '../components/common/Modal';
@@ -524,27 +524,12 @@ export default function SettingsPage() {
 
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-base-content/50 uppercase tracking-wider">Ngày sinh</label>
-                    <div className="dropdown">
-                      <label
-                        tabIndex={0}
-                        className="input input-bordered input-sm focus:input-primary w-full cursor-pointer flex items-center"
-                      >
-                        {infoForm.dateOfBirth ? format(new Date(infoForm.dateOfBirth), 'dd/MM/yyyy') : 'Chọn ngày sinh'}
-                      </label>
-                      <div tabIndex={0} className="dropdown-content z-10 mt-1">
-                        <DayPicker
-                          mode="single"
-                          locale={viDayPicker}
-                          captionLayout="dropdown"
-                          className="react-day-picker"
-                          selected={infoForm.dateOfBirth ? new Date(infoForm.dateOfBirth) : undefined}
-                          onSelect={(date) => {
-                            setInfoForm(prev => ({ ...prev, dateOfBirth: date ? format(date, 'yyyy-MM-dd') : '' }));
-                            document.activeElement?.blur();
-                          }}
-                        />
-                      </div>
-                    </div>
+                    <DatePicker
+                      value={infoForm.dateOfBirth}
+                      onChange={dateOfBirth => setInfoForm(prev => ({ ...prev, dateOfBirth }))}
+                      placeholder="Chọn ngày sinh"
+                      ariaLabel="Chọn ngày sinh"
+                    />
                   </div>
 
                   <div className="flex flex-col gap-1.5">
@@ -827,7 +812,12 @@ export default function SettingsPage() {
               </form>
             )}
 
-            {tab === 'security' && <TotpSettings />}
+            {tab === 'security' && (
+              <>
+                <TotpSettings />
+                <DeleteAccountSection />
+              </>
+            )}
 
             {tab === 'blocked' && (
               <div className="flex flex-col gap-3">

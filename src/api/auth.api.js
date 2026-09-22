@@ -88,6 +88,15 @@ export const verifyResetOtp = (email, otp) =>
 export const resetPassword = (payload) =>
   api.post('/auth/reset-password', payload).then(res => res.data);
 
+export const requestAccountDeletion = (payload) =>
+  api.post('/auth/request-account-deletion', payload).then(res => res.data);
+
+export const requestAccountRecovery = (email) =>
+  api.post('/auth/request-account-recovery', { email }).then(res => res.data);
+
+export const verifyAccountRecovery = (email, otp) =>
+  api.post('/auth/verify-account-recovery', { email, otp }).then(res => res.data);
+
 // payload: { deviceId, publicKey, deviceName, currentPassword }
 export const registerDevice = (payload) =>
   api.put('/auth/devices', payload).then(res => res.data);

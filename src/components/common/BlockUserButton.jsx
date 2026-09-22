@@ -35,7 +35,7 @@ export default function BlockUserButton({ userId, displayName, blocked, onChange
           title={blocked ? `Bỏ chặn ${displayName}?` : `Chặn ${displayName}?`}
           description={blocked
             ? 'Bỏ chặn không tự động kết bạn lại.'
-            : 'Hai người sẽ không thể nhắn tin trực tiếp, gọi hoặc gửi lời mời kết bạn. Quan hệ bạn bè và lời mời đang chờ sẽ bị xóa; tin nhắn cũ vẫn được giữ.'}
+            : 'Hai người sẽ không thể nhắn tin trực tiếp, gọi hoặc gửi lời mời kết bạn. Nếu đang là bạn bè, quan hệ bạn bè được giữ nguyên; lời mời kết bạn đang chờ (nếu có) sẽ bị hủy. Tin nhắn cũ vẫn được giữ.'}
           confirmLabel={blocked ? 'Bỏ chặn' : 'Chặn'}
           danger={!blocked}
           onConfirm={handleAction}

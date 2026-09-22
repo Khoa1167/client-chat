@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { MessageCircleIcon } from '@hugeicons/core-free-icons';
 import { toast } from '../common/toastStore';
@@ -18,6 +18,7 @@ import InviteModal from './InviteModal';
 import PollModal from './PollModal';
 import useChatScroll from '../../hooks/chat/useChatScroll';
 import useChatMessages from '../../hooks/chat/useChatMessages';
+import useBlockedUserIds from '../../hooks/useBlockedUserIds';
 import useRoomEncryption from '../../hooks/chat/useRoomEncryption';
 import useRoomManagement from '../../hooks/chat/useRoomManagement';
 import { getMyRooms } from '../../api/rooms.api';
@@ -75,6 +76,14 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
     loadMore, handleReact, handleTyping, handleEdit, handlePollVote, partnerReadAt,
   } = useChatMessages(room, user, { emit, on, isConnected }, { bottomRef, containerRef, encryptForRoom: encryptDraftForRoom });
 
+  // Ẩn tin nhắn của người mình đã chặn trong group chung — DM đã bị chặn toàn bộ ở mức phòng
+  // (canContactDm phía dưới) nên không cần lọc thêm ở đây.
+  const blockedIds = useBlockedUserIds();
+  const visibleMessages = useMemo(
+    () => room.isDM ? messages : messages.filter(m => !blockedIds.has(m.sender?._id?.toString())),
+    [messages, blockedIds, room.isDM]
+  );
+
   const handleMessageScroll = useCallback(() => {
     handleScroll();
     if (containerRef.current?.scrollTop <= 100) loadMore();
@@ -101,7 +110,12 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
     const syncBlock = (event) => {
       if (event.detail.userId === dmPartnerId) {
         version++;
-        setDmAccess({ userId: dmPartnerId, blockedByMe: event.detail.blocked, friendshipStatus: 'none' });
+        // Block giờ chỉ hủy lời mời đang chờ — friendship đã accepted vẫn được giữ nguyên (xem friends.service.js blockUser).
+        setDmAccess(prev => ({
+          userId: dmPartnerId,
+          blockedByMe: event.detail.blocked,
+          friendshipStatus: prev?.friendshipStatus === 'accepted' ? 'accepted' : 'none',
+        }));
       }
     };
     const offAccepted = on('friend:request_accepted', loadProfile);
@@ -338,7 +352,7 @@ export default function ChatWindow({ room, onCloseChat, onBackToFriends, onIniti
           hasMore={hasMore}
           backgroundStyle={getChatBackgroundStyle(chatBackground, chatBackgroundImage)}
           messageTextColor={getChatMessageColor(chatMessageColor)}
-          messages={messages}
+          messages={visibleMessages}
           onReact={handleReact}
           onReply={setReplyTo}
           isDM={room.isDM}

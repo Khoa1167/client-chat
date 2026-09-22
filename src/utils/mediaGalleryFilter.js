@@ -1,4 +1,4 @@
-const URL_REGEX = /https?:\/\/[^\s]+/g;
+export const URL_REGEX = /https?:\/\/[^\s]+/g;
 
 export function filterMediaMessages(messages) {
   return messages.filter(m => !m.isDeleted && m.type === 'image');

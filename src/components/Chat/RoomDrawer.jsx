@@ -267,6 +267,7 @@ export default function RoomDrawer({
           {effectiveTab === 'search' && (
             <SearchBar
               messages={messages || []}
+              roomMembers={roomMembers || []}
               hasMore={hasMore}
               loadMore={loadMore}
               onSelectMessage={(msgId) => {
