@@ -18,7 +18,7 @@ export default function useImageUpload({ initial = '', uploadFn, formField, onSu
   };
 
   const onUpload = async () => {
-    if (!file) return;
+    if (!file) return null;
     setLoading(true);
     try {
       const formData = new FormData();
@@ -26,8 +26,10 @@ export default function useImageUpload({ initial = '', uploadFn, formField, onSu
       const data = await uploadFn(formData);
       onSuccess(data);
       setFile(null);
+      return data;
     } catch (err) {
       toast.error(err.response?.data?.message || errorMessage);
+      return null;
     } finally {
       setLoading(false);
     }

@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
   const [needDevicePassword, setNeedDevicePassword] = useState(false);
 
   // Helper đảm bảo thiết bị hiện tại được tạo và đăng ký E2EE Key
-  const initDeviceKey = async (currentPassword) => {
+  const initDeviceKey = async (currentPassword, remember = false) => {
     const deviceId = getDeviceId();
     const e2eeKeyId = getE2eeKeyId();
     let privateKey = await getPrivateKey(e2eeKeyId);
@@ -50,6 +50,7 @@ export const AuthProvider = ({ children }) => {
       publicKey: publicKeyJWK,
       deviceName,
       currentPassword,
+      remember,
     });
 
     return data;
@@ -65,13 +66,13 @@ export const AuthProvider = ({ children }) => {
       .finally(() => setLoading(false));
   }, []);
 
-  const finishLogin = async (data, password) => {
+  const finishLogin = async (data, password, remember = false) => {
     // Đăng ký thiết bị TRƯỚC khi setUser — token lúc này vẫn là Bootstrap Token (chỉ vài route
     // whitelist dùng được, xem authWhitelist.js), setUser sớm sẽ khiến ChatPage/Sidebar mount và
     // gọi API (getMyRooms...) trước khi cookie đổi thành Device Token thật, gây lỗi 403.
     setCryptoUserId(data.user._id);
     try {
-      await initDeviceKey(password);
+      await initDeviceKey(password, remember);
     } catch (err) {
       // Chỉ log message — err (axios error) giữ nguyên err.config.data là request body vừa gửi,
       // gồm cả currentPassword plaintext; log cả object sẽ lộ mật khẩu ra console.
@@ -88,17 +89,17 @@ export const AuthProvider = ({ children }) => {
     return { ...data, user: updatedUser };
   };
 
-  const login = async (username, password, turnstileToken) => {
+  const login = async (username, password, turnstileToken, remember = false) => {
     const data = await loginApi(username, password, turnstileToken);
     if (data.mfaRequired) return data;
-    return finishLogin(data, password);
+    return finishLogin(data, password, remember);
   };
 
-  const verifyTotpLogin = async (challengeToken, code, password) => {
+  const verifyTotpLogin = async (challengeToken, code, password, remember = false) => {
     const data = await verifyTotpLoginApi(challengeToken, code);
-    return finishLogin(data, password);
+    return finishLogin(data, password, remember);
   };
-  const verifyPasskeyLogin = async (challengeToken, assertionBody, password) => finishLogin(await verifyPasskeyLoginApi(challengeToken, assertionBody), password);
+  const verifyPasskeyLogin = async (challengeToken, assertionBody, password, remember = false) => finishLogin(await verifyPasskeyLoginApi(challengeToken, assertionBody), password, remember);
 
   const logout = async () => {
     // Thu hồi token phía server (xóa tokenHash thiết bị + cookie) — nếu không, token cũ (kể cả

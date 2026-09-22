@@ -73,6 +73,9 @@ export const changePassword = (payload) =>
 export const uploadAvatar = (formData) =>
   api.post('/auth/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(res => res.data);
 
+export const removeAvatar = () =>
+  api.delete('/auth/avatar').then(res => res.data);
+
 export const uploadCover = (formData) =>
   api.post('/auth/cover', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(res => res.data);
 

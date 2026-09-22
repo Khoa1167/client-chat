@@ -24,7 +24,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import {
   getDevices, revokeDevice, getLoginHistory, changePassword, updateProfile,
-  uploadAvatar, uploadCover, removeCover, requestEmailChange, verifyEmailChange,
+  uploadAvatar, removeAvatar, uploadCover, removeCover, requestEmailChange, verifyEmailChange,
 } from '../api/auth.api';
 import { getDeviceId } from '../crypto';
 import { isOnDeviceEnabled, setOnDeviceEnabled } from '../utils/onDeviceTranscriber';
@@ -168,7 +168,36 @@ export default function SettingsPage() {
     onSuccess: setUser, errorMessage: 'Upload ảnh bìa thất bại',
   });
 
+  const [mediaSaving, setMediaSaving] = useState(false);
+  const [showDeleteAvatarConfirm, setShowDeleteAvatarConfirm] = useState(false);
   const [showDeleteCoverConfirm, setShowDeleteCoverConfirm] = useState(false);
+  const discardMediaChanges = () => {
+    avatar.reset(user.avatar || '');
+    cover.reset(user.cover || '');
+  };
+  const handleSaveMedia = async () => {
+    setMediaSaving(true);
+    try {
+      if (avatar.file && !(await avatar.onUpload())) return;
+      if (cover.file && !(await cover.onUpload())) return;
+      toast.success('Đã cập nhật ảnh hồ sơ');
+    } finally {
+      setMediaSaving(false);
+    }
+  };
+  const handleDeleteAvatar = async () => {
+    setShowDeleteAvatarConfirm(false);
+    avatar.setLoading(true);
+    try {
+      const data = await removeAvatar();
+      setUser(data);
+      avatar.reset('');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Xóa avatar thất bại');
+    } finally {
+      avatar.setLoading(false);
+    }
+  };
   const handleDeleteCover = async () => {
     setShowDeleteCoverConfirm(false);
     cover.setLoading(true);
@@ -448,7 +477,27 @@ export default function SettingsPage() {
                         <circle cx="12" cy="13" r="4" />
                       </svg>
                     </div>
+                    {user.avatar && !avatar.file && (
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-circle bg-black/60 hover:bg-error border-none text-white absolute -top-1 -right-1 z-10 opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                        onClick={(e) => { e.stopPropagation(); setShowDeleteAvatarConfirm(true); }}
+                        title="Xóa avatar"
+                      >
+                        <HugeiconsIcon icon={Cancel01Icon} size={14} strokeWidth={1.8} />
+                      </button>
+                    )}
                   </div>
+
+                  {showDeleteAvatarConfirm && (
+                    <ConfirmModal
+                      title="Xóa avatar?"
+                      description="Avatar hiện tại sẽ bị xóa khỏi hồ sơ của bạn."
+                      confirmLabel="Xóa"
+                      onConfirm={handleDeleteAvatar}
+                      onCancel={() => setShowDeleteAvatarConfirm(false)}
+                    />
+                  )}
 
                   <input
                     type="file"
@@ -578,57 +627,29 @@ export default function SettingsPage() {
                   </Button>
                 </form>
 
-                {/* Popup Floating Confirm Bar cho Ảnh bìa */}
-                {cover.file && (
+                {/* Lưu avatar và ảnh bìa đã chọn trong một lần xác nhận. */}
+                {(avatar.file || cover.file) && (
                   <div className="fixed bottom-4 left-4 right-4 md:left-auto md:w-96 z-30 bg-neutral text-neutral-content backdrop-blur-md p-3.5 rounded-xl shadow-2xl flex items-center justify-between border border-white/10 animate-fade-in">
                     <div className="text-xs font-semibold">
-                      <span>Xác nhận lưu ảnh bìa mới?</span>
+                      <span>{avatar.file && cover.file ? 'Xác nhận lưu avatar và ảnh bìa mới?' : `Xác nhận lưu ${avatar.file ? 'avatar' : 'ảnh bìa'} mới?`}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => cover.reset(user.cover || '')}
+                        onClick={discardMediaChanges}
                         className="btn btn-xs bg-white/10 hover:bg-white/20 border-none text-neutral-content/70 hover:text-white"
-                        disabled={cover.loading}
+                        disabled={mediaSaving}
                       >
                         Hủy
                       </button>
                       <Button
                         type="button"
                         variant="primary"
-                        onClick={cover.onUpload}
-                        disabled={cover.loading}
+                        onClick={handleSaveMedia}
+                        disabled={mediaSaving}
                         className="btn-xs"
                       >
-                        {cover.loading ? 'Đang lưu...' : 'Lưu ảnh bìa'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Popup Floating Confirm Bar cho Avatar */}
-                {avatar.file && (
-                  <div className="fixed bottom-4 left-4 right-4 md:left-auto md:w-96 z-30 bg-neutral text-neutral-content backdrop-blur-md p-3.5 rounded-xl shadow-2xl flex items-center justify-between border border-white/10 animate-fade-in">
-                    <div className="text-xs font-semibold">
-                      <span>Xác nhận lưu avatar mới?</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => avatar.reset(user.avatar || '')}
-                        className="btn btn-xs bg-white/10 hover:bg-white/20 border-none text-neutral-content/70 hover:text-white"
-                        disabled={avatar.loading}
-                      >
-                        Hủy
-                      </button>
-                      <Button
-                        type="button"
-                        variant="primary"
-                        onClick={avatar.onUpload}
-                        disabled={avatar.loading}
-                        className="btn-xs"
-                      >
-                        {avatar.loading ? 'Đang lưu...' : 'Lưu Avatar'}
+                        {mediaSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
                       </Button>
                     </div>
                   </div>

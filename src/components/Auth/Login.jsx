@@ -30,6 +30,7 @@ export default function Login() {
   const [mfaCode, setMfaCode] = useState('');
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [mfaMethods, setMfaMethods] = useState({ totp: false, passkey: false, recovery: false });
+  const [remember, setRemember]       = useState(false);
   const { login, verifyTotpLogin, verifyPasskeyLogin } = useAuth();
   const navigate                      = useNavigate();
   const location                      = useLocation();
@@ -43,7 +44,7 @@ export default function Login() {
     showError('');
     setLoading(true);
     try {
-      const result = await login(form.username, form.password, turnstileToken);
+      const result = await login(form.username, form.password, turnstileToken, remember);
       if (result.mfaRequired) {
         setMfaChallenge(result.challengeToken);
         setMfaMethods(result.methods || {});
@@ -68,7 +69,7 @@ export default function Login() {
       const options = await getPasskeyLoginOptions(mfaChallenge);
       const { startAuthentication } = await import('@simplewebauthn/browser');
       const assertion = await startAuthentication({ optionsJSON: options });
-      await verifyPasskeyLogin(mfaChallenge, assertion, form.password);
+      await verifyPasskeyLogin(mfaChallenge, assertion, form.password, remember);
       const from = location.state?.from;
       navigate(from ? `${from.pathname}${from.search}` : '/');
     } catch (err) {
@@ -83,7 +84,7 @@ export default function Login() {
     showError('');
     setLoading(true);
     try {
-      await verifyTotpLogin(mfaChallenge, mfaCode, form.password);
+      await verifyTotpLogin(mfaChallenge, mfaCode, form.password, remember);
       const from = location.state?.from;
       navigate(from ? `${from.pathname}${from.search}` : '/');
     } catch (err) {
@@ -192,7 +193,17 @@ export default function Login() {
                 required
               />
             </div>
-            
+
+            <label className="label cursor-pointer justify-start gap-2 py-0">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm checkbox-primary"
+                checked={remember}
+                onChange={e => setRemember(e.target.checked)}
+              />
+              <span className="label-text text-sm">Ghi nhớ đăng nhập</span>
+            </label>
+
             <Turnstile key={turnstileResetKey} onVerify={(token) => { setTurnstileToken(token); setCaptchaWarning(false); }} />
             {captchaWarning && (
               <span className="text-xs text-error flex items-center justify-center gap-1">Vui lòng xác thực CAPTCHA trước khi tiếp tục</span>
